@@ -1,12 +1,13 @@
 import os
 import json
-import sqlite3
 import requests
 from typing import Optional, List
 from fastapi import FastAPI, Depends, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from jose import jwt, JWTError
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 app = FastAPI(title="FitHabit API", version="2.0.0")
 
@@ -23,26 +24,28 @@ app.add_middleware(
 SECRET_KEY = "fithabit_local_super_secret_key_change_me_in_prod"
 ALGORITHM = "HS256"
 
-# Database Connection
-DATABASE_FILE = "fit_habit.db"
+# Supabase PostgreSQL Connection URI
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql://postgres.gbtovqfgxlmtvvqjlxlw:Varad%4073873@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres?sslmode=require"
+)
 
 def get_db():
-    conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     try:
         yield conn
     finally:
         conn.close()
 
-# Helper to run migrations / init tables
+# Helper to run migrations / init tables in Supabase PostgreSQL
 def init_db():
-    conn = sqlite3.connect(DATABASE_FILE)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     
     # 1. Users Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             email TEXT UNIQUE,
             name TEXT,
             picture TEXT,
@@ -133,10 +136,14 @@ def init_db():
     conn.close()
 
 # Run database setup
-init_db()
+try:
+    init_db()
+    print("Supabase PostgreSQL tables initialized successfully!")
+except Exception as e:
+    print("Warning: Failed to auto-initialize database tables:", e)
 
 # --- AUTHENTICATION DEPENDENCY ---
-def get_current_user(authorization: Optional[str] = Header(None), db: sqlite3.Connection = Depends(get_db)):
+def get_current_user(authorization: Optional[str] = Header(None), db = Depends(get_db)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -153,7 +160,7 @@ def get_current_user(authorization: Optional[str] = Header(None), db: sqlite3.Co
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token verification failed")
     
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
     user = cursor.fetchone()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
@@ -188,6 +195,8 @@ class SettingsUpdate(BaseModel):
     notificationsEnabled: bool
     notificationTime: str
 
+from pydantic import BaseModel, field_validator
+
 class DailyLogUpdate(BaseModel):
     workoutDone: bool
     proteinLog: List[dict]
@@ -198,6 +207,20 @@ class DailyLogUpdate(BaseModel):
     notes: Optional[str] = ""
     exercisesCompleted: dict
     isFastDay: bool
+
+    @field_validator('caloriesQuick', mode='before')
+    @classmethod
+    def parse_calories(cls, v):
+        if v == '':
+            return None
+        return v
+
+    @field_validator('sleep', mode='before')
+    @classmethod
+    def parse_sleep(cls, v):
+        if v == '':
+            return None
+        return v
 
 class CheckInSave(BaseModel):
     date: str
@@ -222,22 +245,22 @@ def create_jwt_token(user_id: int, email: str) -> str:
     payload = {"user_id": user_id, "email": email}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-async def check_and_seed_user_settings(user_id: int, db: sqlite3.Connection):
+async def check_and_seed_user_settings(user_id: int, db):
     cursor = db.cursor()
-    cursor.execute("SELECT user_id FROM settings WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT user_id FROM settings WHERE user_id = %s", (user_id,))
     if not cursor.fetchone():
         cursor.execute(
-            "INSERT INTO settings (user_id, theme_mode, notifications_enabled, notification_time) VALUES (?, 'light', 0, '20:00')",
+            "INSERT INTO settings (user_id, theme_mode, notifications_enabled, notification_time) VALUES (%s, 'light', 0, '20:00')",
             (user_id,)
         )
         db.commit()
 
-# Dynamic Workout split seeder
-async def seed_workout_plan_for_user(user_id: int, months: int, db: sqlite3.Connection):
+# Dynamic Workout split seeder (PostgreSQL compatible)
+async def seed_workout_plan_for_user(user_id: int, months: int, db):
     cursor = db.cursor()
-    cursor.execute("DELETE FROM workout_plan WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM workout_plan WHERE user_id = %s", (user_id,))
 
-    total_weeks = Math_round_weeks = round(months * 4.3)
+    total_weeks = round(months * 4.3)
     f_weeks = max(1, round(total_weeks * 0.2))
     b_weeks = max(1, round(total_weeks * 0.5))
     
@@ -249,7 +272,7 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db: sqlite3.Conn
         {"name": phase1, "sets": 3, "reps": "12", "label": "foundation"},
         {"name": phase2, "sets": 4, "reps": "10-12", "label": "build"},
         {"name": phase3, "sets": 4, "reps": "6-8 (Heavy)", "label": "intensity"}
-      ]
+    ]
 
     default_split = {
         "Monday": {
@@ -329,10 +352,12 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db: sqlite3.Conn
                     "muscleGroup": ex["group"]
                 })
             
-            cursor.execute(
-                "INSERT OR REPLACE INTO workout_plan (user_id, phase, day, focus, exercises) VALUES (?, ?, ?, ?, ?)",
-                (user_id, phase["name"], day, details["focus"], json.dumps(exercises))
-            )
+            cursor.execute("""
+                INSERT INTO workout_plan (user_id, phase, day, focus, exercises)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, phase, day)
+                DO UPDATE SET focus = EXCLUDED.focus, exercises = EXCLUDED.exercises
+            """, (user_id, phase["name"], day, details["focus"], json.dumps(exercises)))
     db.commit()
 
 
@@ -340,7 +365,7 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db: sqlite3.Conn
 
 # 1. Google OAuth2 Token login
 @app.post("/api/auth/google")
-async def google_login(payload: GoogleAuthRequest, db: sqlite3.Connection = Depends(get_db)):
+async def google_login(payload: GoogleAuthRequest, db = Depends(get_db)):
     token = payload.credential
     try:
         # Validate ID Token with Google APIs
@@ -358,15 +383,15 @@ async def google_login(payload: GoogleAuthRequest, db: sqlite3.Connection = Depe
             raise HTTPException(status_code=400, detail="Google token did not provide an email address")
 
         cursor = db.cursor()
-        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
         user_row = cursor.fetchone()
         
         if user_row:
             user_id = user_row["id"]
-            cursor.execute("UPDATE users SET name = ?, picture = ?, google_id = ? WHERE id = ?", (name, picture, google_id, user_id))
+            cursor.execute("UPDATE users SET name = %s, picture = %s, google_id = %s WHERE id = %s", (name, picture, google_id, user_id))
         else:
-            cursor.execute("INSERT INTO users (email, name, picture, google_id) VALUES (?, ?, ?, ?)", (email, name, picture, google_id))
-            user_id = cursor.lastrowid
+            cursor.execute("INSERT INTO users (email, name, picture, google_id) VALUES (%s, %s, %s, %s) RETURNING id", (email, name, picture, google_id))
+            user_id = cursor.fetchone()["id"]
         
         db.commit()
         await check_and_seed_user_settings(user_id, db)
@@ -381,7 +406,7 @@ async def google_login(payload: GoogleAuthRequest, db: sqlite3.Connection = Depe
 
 # 2. Guest / Mock Bypass Login
 @app.post("/api/auth/mock")
-async def mock_login(payload: MockAuthRequest, db: sqlite3.Connection = Depends(get_db)):
+async def mock_login(payload: MockAuthRequest, db = Depends(get_db)):
     email = payload.email.strip().lower()
     name = payload.name.strip()
     
@@ -389,15 +414,15 @@ async def mock_login(payload: MockAuthRequest, db: sqlite3.Connection = Depends(
         raise HTTPException(status_code=400, detail="Email and Name are required")
 
     cursor = db.cursor()
-    cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+    cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
     user_row = cursor.fetchone()
 
     if user_row:
         user_id = user_row["id"]
-        cursor.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+        cursor.execute("UPDATE users SET name = %s WHERE id = %s", (name, user_id))
     else:
-        cursor.execute("INSERT INTO users (email, name, picture, google_id) VALUES (?, ?, '', '')", (email, name))
-        user_id = cursor.lastrowid
+        cursor.execute("INSERT INTO users (email, name, picture, google_id) VALUES (%s, %s, '', '') RETURNING id", (email, name))
+        user_id = cursor.fetchone()["id"]
     
     db.commit()
     await check_and_seed_user_settings(user_id, db)
@@ -415,9 +440,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 # 4. User Profile
 @app.get("/api/profile")
-async def get_profile(current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def get_profile(current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM profile WHERE user_id = ?", (current_user["id"],))
+    cursor.execute("SELECT * FROM profile WHERE user_id = %s", (current_user["id"],))
     row = cursor.fetchone()
     if not row:
         return {"isOnboarded": False}
@@ -428,11 +453,11 @@ async def get_profile(current_user: dict = Depends(get_current_user), db: sqlite
     return profile_dict
 
 @app.post("/api/profile")
-async def save_profile(payload: ProfileUpdate, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def save_profile(payload: ProfileUpdate, current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
     
-    cursor.execute("SELECT user_id FROM profile WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT user_id FROM profile WHERE user_id = %s", (user_id,))
     exists = cursor.fetchone()
     
     fasting_days_str = json.dumps(payload.fasting_days)
@@ -440,11 +465,11 @@ async def save_profile(payload: ProfileUpdate, current_user: dict = Depends(get_
     if exists:
         cursor.execute("""
             UPDATE profile SET
-                name = ?, age = ?, gender = ?, height_cm = ?, starting_weight = ?,
-                activity_level = ?, plan_duration_months = ?, goal_weight = ?,
-                target_protein = ?, target_calories = ?, target_cigarettes = ?,
-                start_date = ?, is_onboarded = 1, fasting_days = ?
-            WHERE user_id = ?
+                name = %s, age = %s, gender = %s, height_cm = %s, starting_weight = %s,
+                activity_level = %s, plan_duration_months = %s, goal_weight = %s,
+                target_protein = %s, target_calories = %s, target_cigarettes = %s,
+                start_date = %s, is_onboarded = 1, fasting_days = %s
+            WHERE user_id = %s
         """, (
             payload.name, payload.age, payload.gender, payload.height_cm, payload.starting_weight,
             payload.activity_level, payload.plan_duration_months, payload.goal_weight,
@@ -457,7 +482,7 @@ async def save_profile(payload: ProfileUpdate, current_user: dict = Depends(get_
                 user_id, name, age, gender, height_cm, starting_weight, activity_level,
                 plan_duration_months, goal_weight, target_protein, target_calories,
                 target_cigarettes, start_date, is_onboarded, fasting_days
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
         """, (
             user_id, payload.name, payload.age, payload.gender, payload.height_cm, payload.starting_weight,
             payload.activity_level, payload.plan_duration_months, payload.goal_weight,
@@ -467,15 +492,15 @@ async def save_profile(payload: ProfileUpdate, current_user: dict = Depends(get_
     
     db.commit()
     
-    # Dynamically seed default progressive workout plans in database
+    # Seed default progressive workout plans in database
     await seed_workout_plan_for_user(user_id, payload.plan_duration_months, db)
     return {"success": True}
 
 # 5. Settings Router
 @app.get("/api/settings")
-async def get_settings(current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def get_settings(current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM settings WHERE user_id = ?", (current_user["id"],))
+    cursor.execute("SELECT * FROM settings WHERE user_id = %s", (current_user["id"],))
     row = cursor.fetchone()
     if not row:
         return {"themeMode": "light", "notificationsEnabled": False, "notificationTime": "20:00"}
@@ -487,24 +512,24 @@ async def get_settings(current_user: dict = Depends(get_current_user), db: sqlit
     }
 
 @app.post("/api/settings")
-async def save_settings(payload: SettingsUpdate, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def save_settings(payload: SettingsUpdate, current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
     cursor.execute("""
         UPDATE settings SET
-            theme_mode = ?,
-            notifications_enabled = ?,
-            notification_time = ?
-        WHERE user_id = ?
+            theme_mode = %s,
+            notifications_enabled = %s,
+            notification_time = %s
+        WHERE user_id = %s
     """, (payload.themeMode, 1 if payload.notificationsEnabled else 0, payload.notificationTime, user_id))
     db.commit()
     return {"success": True}
 
 # 6. Workout Plan Library
 @app.get("/api/workout-plan")
-async def get_workout_plan(current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def get_workout_plan(current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM workout_plan WHERE user_id = ?", (current_user["id"],))
+    cursor.execute("SELECT * FROM workout_plan WHERE user_id = %s", (current_user["id"],))
     rows = cursor.fetchall()
     
     plan = {}
@@ -518,24 +543,26 @@ async def get_workout_plan(current_user: dict = Depends(get_current_user), db: s
     return plan
 
 @app.put("/api/workout-plan")
-async def save_workout_plan(payload: dict, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def save_workout_plan(payload: dict, current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
     for phase_name, days in payload.items():
         for day_name, details in days.items():
             exercises_str = json.dumps(details.get("exercises", []))
             cursor.execute("""
-                INSERT OR REPLACE INTO workout_plan (user_id, phase, day, focus, exercises)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO workout_plan (user_id, phase, day, focus, exercises)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, phase, day)
+                DO UPDATE SET focus = EXCLUDED.focus, exercises = EXCLUDED.exercises
             """, (user_id, phase_name, day_name, details.get("focus", ""), exercises_str))
     db.commit()
     return {"success": True}
 
 @app.post("/api/workout-plan/reset")
-async def reset_workout_plan(current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def reset_workout_plan(current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
-    cursor.execute("SELECT plan_duration_months FROM profile WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT plan_duration_months FROM profile WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     duration = row["plan_duration_months"] if row else 2
     await seed_workout_plan_for_user(user_id, duration, db)
@@ -543,9 +570,9 @@ async def reset_workout_plan(current_user: dict = Depends(get_current_user), db:
 
 # 7. Daily Logs
 @app.get("/api/daily-logs")
-async def get_daily_logs(current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def get_daily_logs(current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM daily_logs WHERE user_id = ?", (current_user["id"],))
+    cursor.execute("SELECT * FROM daily_logs WHERE user_id = %s", (current_user["id"],))
     rows = cursor.fetchall()
     
     logs = {}
@@ -564,17 +591,28 @@ async def get_daily_logs(current_user: dict = Depends(get_current_user), db: sql
     return logs
 
 @app.post("/api/daily-logs/{date}")
-async def save_daily_log(date: str, payload: DailyLogUpdate, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def save_daily_log(date: str, payload: DailyLogUpdate, current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
     protein_log_str = json.dumps(payload.proteinLog)
     exercises_completed_str = json.dumps(payload.exercisesCompleted)
     
     cursor.execute("""
-        INSERT OR REPLACE INTO daily_logs (
+        INSERT INTO daily_logs (
             user_id, date, workout_done, protein_log, calories_quick, water,
             cigarettes, sleep, notes, exercises_completed, is_fast_day
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (user_id, date)
+        DO UPDATE SET
+            workout_done = EXCLUDED.workout_done,
+            protein_log = EXCLUDED.protein_log,
+            calories_quick = EXCLUDED.calories_quick,
+            water = EXCLUDED.water,
+            cigarettes = EXCLUDED.cigarettes,
+            sleep = EXCLUDED.sleep,
+            notes = EXCLUDED.notes,
+            exercises_completed = EXCLUDED.exercises_completed,
+            is_fast_day = EXCLUDED.is_fast_day
     """, (
         user_id, date, 1 if payload.workoutDone else 0, protein_log_str,
         payload.caloriesQuick, payload.water, payload.cigarettes, payload.sleep,
@@ -585,51 +623,74 @@ async def save_daily_log(date: str, payload: DailyLogUpdate, current_user: dict 
 
 # 8. Weekly Check-ins
 @app.get("/api/weekly-checkins")
-async def get_weekly_checkins(current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def get_weekly_checkins(current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM weekly_checkins WHERE user_id = ? ORDER BY date ASC", (current_user["id"],))
+    cursor.execute("SELECT * FROM weekly_checkins WHERE user_id = %s ORDER BY date ASC", (current_user["id"],))
     rows = cursor.fetchall()
     return [dict(row) for row in rows]
 
 @app.post("/api/weekly-checkins")
-async def save_weekly_checkin(payload: CheckInSave, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def save_weekly_checkin(payload: CheckInSave, current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
     cursor.execute("""
-        INSERT OR REPLACE INTO weekly_checkins (user_id, date, weight, waist, chest, photo)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO weekly_checkins (user_id, date, weight, waist, chest, photo)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (user_id, date)
+        DO UPDATE SET
+            weight = EXCLUDED.weight,
+            waist = EXCLUDED.waist,
+            chest = EXCLUDED.chest,
+            photo = EXCLUDED.photo
     """, (user_id, payload.date, payload.weight, payload.waist, payload.chest, payload.photo))
     db.commit()
     return {"success": True}
 
 @app.delete("/api/weekly-checkins/{date}")
-async def delete_weekly_checkin(date: str, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def delete_weekly_checkin(date: str, current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
-    cursor.execute("DELETE FROM weekly_checkins WHERE user_id = ? AND date = ?", (user_id, date))
+    cursor.execute("DELETE FROM weekly_checkins WHERE user_id = %s AND date = %s", (user_id, date))
     db.commit()
     return {"success": True}
 
 # 9. Seed Demo Data (Saves to user database)
 @app.post("/api/seed")
-async def seed_data(payload: SeedDataRequest, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def seed_data(payload: SeedDataRequest, current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
     
     # Seed check-ins
     for check in payload.weeklyCheckIns:
         cursor.execute("""
-            INSERT OR REPLACE INTO weekly_checkins (user_id, date, weight, waist, chest, photo)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO weekly_checkins (user_id, date, weight, waist, chest, photo)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (user_id, date)
+            DO UPDATE SET
+                weight = EXCLUDED.weight,
+                waist = EXCLUDED.waist,
+                chest = EXCLUDED.chest,
+                photo = EXCLUDED.photo
         """, (user_id, check["date"], check["weight"], check.get("waist"), check.get("chest"), check.get("photo")))
         
     # Seed logs
     for date, log in payload.dailyLogs.items():
         cursor.execute("""
-            INSERT OR REPLACE INTO daily_logs (
+            INSERT INTO daily_logs (
                 user_id, date, workout_done, protein_log, calories_quick, water,
                 cigarettes, sleep, notes, exercises_completed, is_fast_day
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (user_id, date)
+            DO UPDATE SET
+                workout_done = EXCLUDED.workout_done,
+                protein_log = EXCLUDED.protein_log,
+                calories_quick = EXCLUDED.calories_quick,
+                water = EXCLUDED.water,
+                cigarettes = EXCLUDED.cigarettes,
+                sleep = EXCLUDED.sleep,
+                notes = EXCLUDED.notes,
+                exercises_completed = EXCLUDED.exercises_completed,
+                is_fast_day = EXCLUDED.is_fast_day
         """, (
             user_id, date, 1 if log["workoutDone"] else 0, json.dumps(log.get("proteinLog", [])),
             log.get("caloriesQuick"), log.get("water", 0), log.get("cigarettes", 0),
@@ -642,29 +703,29 @@ async def seed_data(payload: SeedDataRequest, current_user: dict = Depends(get_c
 
 # 10. Database Reset
 @app.post("/api/reset")
-async def reset_user_data(current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def reset_user_data(current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
-    cursor.execute("DELETE FROM profile WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM daily_logs WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM weekly_checkins WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM workout_plan WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM settings WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM profile WHERE user_id = %s", (user_id,))
+    cursor.execute("DELETE FROM daily_logs WHERE user_id = %s", (user_id,))
+    cursor.execute("DELETE FROM weekly_checkins WHERE user_id = %s", (user_id,))
+    cursor.execute("DELETE FROM workout_plan WHERE user_id = %s", (user_id,))
+    cursor.execute("DELETE FROM settings WHERE user_id = %s", (user_id,))
     db.commit()
     await check_and_seed_user_settings(user_id, db)
     return {"success": True}
 
 # 11. Backup restore import
 @app.post("/api/import")
-async def import_backup(payload: ImportRequest, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def import_backup(payload: ImportRequest, current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
     cursor = db.cursor()
     
     # Reset existing user tables first
-    cursor.execute("DELETE FROM profile WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM daily_logs WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM weekly_checkins WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM workout_plan WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM profile WHERE user_id = %s", (user_id,))
+    cursor.execute("DELETE FROM daily_logs WHERE user_id = %s", (user_id,))
+    cursor.execute("DELETE FROM weekly_checkins WHERE user_id = %s", (user_id,))
+    cursor.execute("DELETE FROM workout_plan WHERE user_id = %s", (user_id,))
 
     # Restore profile
     profile = payload.profile
@@ -673,7 +734,7 @@ async def import_backup(payload: ImportRequest, current_user: dict = Depends(get
             user_id, name, age, gender, height_cm, starting_weight, activity_level,
             plan_duration_months, goal_weight, target_protein, target_calories,
             target_cigarettes, start_date, is_onboarded, fasting_days
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (
         user_id, profile.get("name"), profile.get("age"), profile.get("gender"),
         profile.get("height_cm", profile.get("height")),
@@ -692,8 +753,13 @@ async def import_backup(payload: ImportRequest, current_user: dict = Depends(get
     # Restore settings
     settings = payload.settings
     cursor.execute("""
-        INSERT OR REPLACE INTO settings (user_id, theme_mode, notifications_enabled, notification_time)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO settings (user_id, theme_mode, notifications_enabled, notification_time)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (user_id)
+        DO UPDATE SET
+            theme_mode = EXCLUDED.theme_mode,
+            notifications_enabled = EXCLUDED.notifications_enabled,
+            notification_time = EXCLUDED.notification_time
     """, (
         user_id, settings.get("themeMode", "light"),
         1 if settings.get("notificationsEnabled") else 0,
@@ -706,7 +772,7 @@ async def import_backup(payload: ImportRequest, current_user: dict = Depends(get
             INSERT INTO daily_logs (
                 user_id, date, workout_done, protein_log, calories_quick, water,
                 cigarettes, sleep, notes, exercises_completed, is_fast_day
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             user_id, date, 1 if log.get("workoutDone") else 0, json.dumps(log.get("proteinLog", [])),
             log.get("caloriesQuick"), log.get("water", 0), log.get("cigarettes", 0),
@@ -718,7 +784,7 @@ async def import_backup(payload: ImportRequest, current_user: dict = Depends(get
     for check in payload.weeklyCheckIns:
         cursor.execute("""
             INSERT INTO weekly_checkins (user_id, date, weight, waist, chest, photo)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """, (user_id, check["date"], check["weight"], check.get("waist"), check.get("chest"), check.get("photo")))
 
     # Restore workout plan
@@ -726,7 +792,7 @@ async def import_backup(payload: ImportRequest, current_user: dict = Depends(get
         for day_name, details in days.items():
             cursor.execute("""
                 INSERT INTO workout_plan (user_id, phase, day, focus, exercises)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             """, (user_id, phase_name, day_name, details.get("focus"), json.dumps(details.get("exercises", []))))
 
     db.commit()
