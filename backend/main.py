@@ -627,6 +627,57 @@ async def get_profile(current_user: dict = Depends(get_current_user), db = Depen
     profile_dict["aiDietPlan"] = profile_dict.get("ai_diet_plan")
     return profile_dict
 
+class SummaryRequest(BaseModel):
+    name: str
+    age: int
+    gender: str
+    height_cm: float
+    starting_weight: float
+    activity_level: str
+    plan_duration_months: int
+    goal_weight: float
+    target_protein: int
+    target_calories: int
+    target_cigarettes: int
+    country: str
+    diet_type: str
+    typical_meals: str
+    workout_time_available: str
+    medical_conditions: List[str]
+    primary_goal: str
+    preferred_rest_days: List[str]
+    fasting_days: List[str]
+
+@app.post("/api/profile/onboarding-summary")
+async def generate_onboarding_summary(payload: SummaryRequest):
+    bmi = round(payload.starting_weight / ((payload.height_cm / 100) ** 2), 1)
+    prompt = f"""
+You are a friendly personal fitness coach. Based on the user's details, write a concise 2-3 sentence summary explaining what this personalized plan means for them, their calorie deficit/surplus, BMR/TDEE context, active split focus, and highlight any diabetic/medical or rest-day adaptations:
+User profile:
+- Name: {payload.name}
+- Age: {payload.age}
+- Gender: {payload.gender}
+- BMI: {bmi}
+- Goal: {payload.primary_goal}
+- Goal Weight: {payload.goal_weight} kg
+- Calories target: {payload.target_calories} kcal
+- Protein target: {payload.target_protein} g
+- Country/Diet: {payload.country} / {payload.diet_type}
+- Workout Time: {payload.workout_time_available}
+- Rest Days: {payload.preferred_rest_days}
+- Fasting Days: {payload.fasting_days}
+- Medical Conditions: {payload.medical_conditions}
+
+Keep it strictly to 2-3 sentences. Do not use any markdown formatting or lists.
+"""
+    try:
+        model = genai.GenerativeModel('gemini-flash-latest')
+        response = model.generate_content(prompt)
+        return {"summary": response.text.strip()}
+    except Exception as e:
+        return {"summary": f"Based on your profile, you're targetting {payload.primary_goal} to reach {payload.goal_weight} kg. Your plan includes a daily target of {payload.target_calories} kcal and {payload.target_protein}g protein, adapted to your {payload.workout_time_available} workouts and preferred rest days."}
+
+
 @app.post("/api/profile/generate-diet")
 async def generate_diet_plan(current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]

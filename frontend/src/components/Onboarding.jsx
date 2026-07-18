@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Award, User, Target, Calendar, Calculator, Sparkles, 
-  ArrowRight, ArrowLeft, ShieldCheck, HelpCircle, Flame, Moon, Coffee 
+  ArrowRight, ArrowLeft, ShieldCheck, HelpCircle, Flame, Moon, Coffee, X 
 } from 'lucide-react';
 import { 
   convertFeetInchesToCm, calculateBMR, calculateTDEE, 
@@ -10,7 +10,7 @@ import {
 } from '../utils/helpers';
 
 export default function Onboarding({ onComplete }) {
-  const [step, setStep] = useState(1); // 1: Biometrics & Preferences, 2: Auto-results/Fasting, 3: Confirm Targets
+  const [step, setStep] = useState(1); // 1: Biometrics & Preferences, 2: Calculated Results, 3: Meal Setup
   
   // Step 1: Raw Inputs + Extended Onboarding Choices
   const [info, setInfo] = useState({
@@ -25,11 +25,10 @@ export default function Onboarding({ onComplete }) {
     cigarettes: '5',
     country: 'India',
     dietType: 'vegetarian',
-    typicalMeals: '',
     workoutTimeAvailable: '1 hr',
-    medicalConditions: [], // e.g. ["Diabetes", "Joint/knee issues"]
+    medicalConditions: [],
     primaryGoal: 'Weight Loss',
-    preferredRestDays: ['Sunday'] // Mon-Sun rest day picker
+    preferredRestDays: ['Sunday']
   });
 
   // Step 2: Calculated & Editable Goals
@@ -48,6 +47,37 @@ export default function Onboarding({ onComplete }) {
     fastingDays: []
   });
 
+  // Dynamic summary from Gemini
+  const [aiSummary, setAiSummary] = useState('');
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+
+  // Step 3: Meal Slots Builder
+  const [mealCount, setMealCount] = useState(3);
+  const [mealsList, setMealsList] = useState([]);
+  const [tempFoodInput, setTempFoodInput] = useState({});
+
+  // Initialize or rebuild meal slots dynamically when count changes
+  useEffect(() => {
+    const count = parseInt(mealCount);
+    let defaultLabels = [];
+    if (count === 2) defaultLabels = ["Lunch", "Dinner"];
+    else if (count === 3) defaultLabels = ["Breakfast", "Lunch", "Dinner"];
+    else if (count === 4) defaultLabels = ["Breakfast", "Lunch", "Evening Snack", "Dinner"];
+    else if (count === 5) defaultLabels = ["Breakfast", "Mid-Morning Snack", "Lunch", "Evening Snack", "Dinner"];
+    else if (count === 6) defaultLabels = ["Early Morning", "Breakfast", "Mid-Morning", "Lunch", "Evening Snack", "Dinner"];
+    
+    const nextMeals = defaultLabels.map((lbl, idx) => {
+      const existing = mealsList[idx];
+      return {
+        id: idx,
+        label: existing ? existing.label : lbl,
+        time: existing ? existing.time : (idx === 0 ? "08:30" : idx === 1 ? "13:00" : idx === 2 ? "17:30" : "20:30"),
+        foods: existing ? existing.foods : []
+      };
+    });
+    setMealsList(nextMeals);
+  }, [mealCount]);
+
   // Re-calculate math based on user inputs
   const runCalculations = () => {
     const feet = parseFloat(info.heightFeet) || 5;
@@ -64,21 +94,27 @@ export default function Onboarding({ onComplete }) {
     
     const suggestedGoal = suggestGoalWeight(heightCm);
     
-    // Scale suggested calories based on Primary Goal:
-    // deficit for Weight Loss, surplus for Muscle Gain, maintenance/slight deficit for recomposition
+    // Scale suggested calories/protein based on Primary Goal:
     let suggestedCal = suggestCalorieTarget(tdee);
+    let suggestedProt = suggestProteinTarget(suggestedGoal);
+
     if (info.primaryGoal === 'Muscle Gain') {
       suggestedCal = Math.round(tdee + 350);
+      suggestedProt = Math.round(suggestedGoal * 2.0);
     } else if (info.primaryGoal === 'Body Recomposition') {
-      suggestedCal = Math.round(tdee - 200);
+      suggestedCal = Math.round(tdee - 150);
+      suggestedProt = Math.round(suggestedGoal * 1.9);
+    } else if (info.primaryGoal === 'Weight Loss + Muscle Gain') {
+      // Recomposition Focus: moderate deficit, high protein
+      suggestedCal = Math.round(tdee - 350);
+      suggestedProt = Math.round(suggestedGoal * 2.0);
     } else if (info.primaryGoal === 'General Fitness') {
       suggestedCal = Math.round(tdee);
     }
 
-    const suggestedProt = suggestProteinTarget(suggestedGoal);
     const suggestedWat = suggestWaterTarget(weight);
     
-    setGoals({
+    const nextGoals = {
       heightCm,
       bmi: parseFloat(bmiVal),
       bmiCat: bmiCatObj.name,
@@ -91,7 +127,10 @@ export default function Onboarding({ onComplete }) {
       targetCigarettes: parseInt(info.cigarettes) || 5,
       includeFasting: goals.includeFasting,
       fastingDays: goals.fastingDays
-    });
+    };
+
+    setGoals(nextGoals);
+    return nextGoals;
   };
 
   useEffect(() => {
@@ -114,7 +153,6 @@ export default function Onboarding({ onComplete }) {
     }));
   };
 
-  // Toggle checklist values (medical conditions)
   const toggleMedicalCondition = (cond) => {
     const current = [...info.medicalConditions];
     if (current.includes(cond)) {
@@ -124,7 +162,6 @@ export default function Onboarding({ onComplete }) {
     }
   };
 
-  // Toggle preferred rest days
   const toggleRestDay = (day) => {
     const current = [...info.preferredRestDays];
     if (current.includes(day)) {
@@ -143,17 +180,96 @@ export default function Onboarding({ onComplete }) {
     }
   };
 
-  const handleNextStep = () => {
-    runCalculations();
-    setStep(prev => prev + 1);
+  // Step transitions
+  const goToStep2 = async () => {
+    const nextGoals = runCalculations();
+    setStep(2);
+    
+    // Fetch AI Summary from backend
+    setIsLoadingSummary(true);
+    setAiSummary('');
+    try {
+      const activeToken = localStorage.getItem('fithabit_token');
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
+      };
+      const res = await fetch('/api/profile/onboarding-summary', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: info.name || 'Challenger',
+          age: parseInt(info.age),
+          gender: info.gender,
+          height_cm: nextGoals.heightCm,
+          starting_weight: parseFloat(info.startingWeight),
+          activity_level: info.activityLevel,
+          plan_duration_months: parseInt(info.planDuration),
+          goal_weight: nextGoals.goalWeight,
+          target_protein: nextGoals.targetProtein,
+          target_calories: nextGoals.targetCalories,
+          target_cigarettes: nextGoals.targetCigarettes,
+          country: info.country,
+          diet_type: info.dietType,
+          typical_meals: info.typicalMeals,
+          workout_time_available: info.workoutTimeAvailable,
+          medical_conditions: info.medicalConditions,
+          primary_goal: info.primaryGoal,
+          preferred_rest_days: info.preferredRestDays,
+          fasting_days: nextGoals.includeFasting ? nextGoals.fastingDays : []
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiSummary(data.summary);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingSummary(false);
+    }
   };
 
-  const handlePrevStep = () => {
-    setStep(prev => prev - 1);
+  // Step 3 food tagging
+  const handleAddFoodItem = (mealId) => {
+    const text = tempFoodInput[mealId] || '';
+    if (!text.trim()) return;
+
+    if (info.dietType === 'vegetarian' || info.dietType === 'jain') {
+      const lower = text.toLowerCase();
+      if (lower.includes('chicken') || lower.includes('fish') || lower.includes('meat') || lower.includes('egg') || lower.includes('beef') || lower.includes('pork')) {
+        alert(`Note: You selected a "${info.dietType}" diet. Please ensure you enter vegetarian food options.`);
+      }
+    }
+
+    setMealsList(prev => prev.map(meal => {
+      if (meal.id === mealId) {
+        return { ...meal, foods: [...meal.foods, text.trim()] };
+      }
+      return meal;
+    }));
+    setTempFoodInput(prev => ({ ...prev, [mealId]: '' }));
   };
 
-  const handleSubmit = (e) => {
+  const handleRemoveFoodItem = (mealId, foodIdx) => {
+    setMealsList(prev => prev.map(meal => {
+      if (meal.id === mealId) {
+        return { ...meal, foods: meal.foods.filter((_, idx) => idx !== foodIdx) };
+      }
+      return meal;
+    }));
+  };
+
+  const handleFinishSetup = (e) => {
     e.preventDefault();
+    
+    // Package Step 3 meals pattern as a clean JSON layout inside typical_meals
+    const typicalMealsString = JSON.stringify(mealsList.map(m => ({
+      label: m.label,
+      time: m.time,
+      foods: m.foods
+    })));
+
     onComplete({
       name: info.name || 'Challenger',
       age: parseInt(info.age),
@@ -170,7 +286,7 @@ export default function Onboarding({ onComplete }) {
       fasting_days: goals.includeFasting ? goals.fastingDays : [],
       country: info.country,
       diet_type: info.dietType,
-      typical_meals: info.typicalMeals,
+      typical_meals: typicalMealsString,
       workout_time_available: info.workoutTimeAvailable,
       medical_conditions: info.medicalConditions,
       primary_goal: info.primaryGoal,
@@ -178,12 +294,17 @@ export default function Onboarding({ onComplete }) {
     });
   };
 
+  const getBmiPercentage = (bmi) => {
+    const val = Math.max(15, Math.min(35, bmi));
+    return ((val - 15) / (35 - 15)) * 100;
+  };
+
   const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const medicalOptions = ["Diabetes", "Thyroid", "High BP", "Joint/knee issues", "None"];
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-50 dark:bg-neutral-950 px-4 py-12 transition-colors duration-200">
-      <div className="max-w-2xl w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 relative overflow-y-auto max-h-[90vh]">
+      <div className="max-w-2xl w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 relative overflow-y-auto max-h-[92vh]">
         
         {/* Glow Details */}
         <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -194,9 +315,9 @@ export default function Onboarding({ onComplete }) {
           <div className="inline-flex p-3 bg-emerald-500/10 dark:bg-emerald-500/5 border border-emerald-500/20 rounded-2xl text-emerald-500 dark:text-emerald-400 mb-2">
             <Award className="w-8 h-8" />
           </div>
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-white font-sans">Autogenerate Your FitHabit Plan</h2>
-          <p className="text-xs md:text-sm text-neutral-500 dark:text-neutral-400">
-            Step {step} of 3: {step === 1 ? 'Biometrics & Preferences' : step === 2 ? 'Calculated Diagnostics' : 'Confirm Targets'}
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-white font-sans">Setup Your FitHabit Plan</h2>
+          <p className="text-xs md:text-sm text-neutral-505 dark:text-neutral-400">
+            Step {step} of 3: {step === 1 ? 'Biometrics & Goal' : step === 2 ? 'Calculated Targets' : 'Your Meal Rhythm'}
           </p>
           <div className="w-full bg-neutral-100 dark:bg-neutral-800 h-1.5 rounded-full overflow-hidden mt-3">
             <div 
@@ -206,7 +327,7 @@ export default function Onboarding({ onComplete }) {
           </div>
         </div>
 
-        {/* STEP 1: Onboarding and Custom Preferences */}
+        {/* STEP 1: Biometrics & Preferences */}
         {step === 1 && (
           <div className="space-y-4 relative z-10 text-xs md:text-sm">
             
@@ -241,9 +362,10 @@ export default function Onboarding({ onComplete }) {
                   onChange={handleInfoChange}
                   className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
                 >
-                  <option value="Weight Loss">Weight Loss (Fat Deficit)</option>
+                  <option value="Weight Loss">Weight Loss (Deficit focus)</option>
                   <option value="Muscle Gain">Muscle Gain (Hypertrophy Surplus)</option>
                   <option value="Body Recomposition">Body Recomposition (Lean & Tone)</option>
+                  <option value="Weight Loss + Muscle Gain">Weight Loss + Muscle Gain (Recomposition Focus)</option>
                   <option value="General Fitness">General Conditioning & Health</option>
                 </select>
               </div>
@@ -273,7 +395,7 @@ export default function Onboarding({ onComplete }) {
                   name="planDuration"
                   value={info.planDuration}
                   onChange={handleInfoChange}
-                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none transition"
                 >
                   <option value="1">1 Month (4 Weeks)</option>
                   <option value="2">2 Months (8 Weeks)</option>
@@ -407,21 +529,6 @@ export default function Onboarding({ onComplete }) {
               </div>
             </div>
 
-            {/* Row 5: Typical Meals description */}
-            <div>
-              <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
-                Typical Daily Meals (seeds AI food suggestions)
-              </label>
-              <textarea
-                name="typicalMeals"
-                placeholder="e.g. Breakfast: Poha & milk. Lunch: 2 chapati & green veggies. Dinner: Dal-rice & curd."
-                value={info.typicalMeals}
-                onChange={handleInfoChange}
-                rows="2"
-                className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition text-xs placeholder-neutral-400"
-              />
-            </div>
-
             {/* Medical Conditions */}
             <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl space-y-2">
               <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block">Medical Conditions (Safe Exercise Flags)</span>
@@ -436,7 +543,7 @@ export default function Onboarding({ onComplete }) {
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
                         isSelected
                           ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500 dark:text-emerald-400 font-extrabold'
-                          : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-500'
+                          : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-505'
                       }`}
                     >
                       {cond}
@@ -504,45 +611,60 @@ export default function Onboarding({ onComplete }) {
             </div>
 
             <button
-              onClick={handleNextStep}
+              onClick={goToStep2}
               className="w-full mt-4 py-3 bg-emerald-500 hover:bg-emerald-600 active:scale-98 text-neutral-950 font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
             >
-              Continue to Calculations
+              Continue to Calculated Plan
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        {/* STEP 2: Calculated results */}
+        {/* STEP 2: Calculated Plan & Diagnostic Results */}
         {step === 2 && (
-          <div className="space-y-5 relative z-10">
+          <div className="space-y-6 relative z-10 text-xs md:text-sm">
+            <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block text-center">Step 2: Calculated Plan Results</span>
+            
+            {/* Visual BMI Gauge card */}
             <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl space-y-3">
-              <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block">Biometric Diagnostics</span>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
-                <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 p-2 rounded-xl">
-                  <span className="text-[9px] text-neutral-400 block font-bold">BMI</span>
-                  <span className="text-sm font-extrabold text-neutral-900 dark:text-white">{goals.bmi}</span>
-                  <span className="text-[8px] text-neutral-500 block">{goals.bmiCat}</span>
-                </div>
-                <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 p-2 rounded-xl">
-                  <span className="text-[9px] text-neutral-400 block font-bold">BMR</span>
-                  <span className="text-sm font-extrabold text-neutral-900 dark:text-white">{goals.bmr}</span>
-                  <span className="text-[8px] text-neutral-500 block">kcal/day</span>
-                </div>
-                <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 p-2 rounded-xl">
-                  <span className="text-[9px] text-neutral-400 block font-bold">TDEE</span>
-                  <span className="text-sm font-extrabold text-neutral-900 dark:text-white">{goals.tdee}</span>
-                  <span className="text-[8px] text-neutral-500 block">Active Burn</span>
-                </div>
-                <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 p-2 rounded-xl">
-                  <span className="text-[9px] text-neutral-400 block font-bold">Mid-BMI Goal</span>
-                  <span className="text-sm font-extrabold text-neutral-900 dark:text-white">{goals.goalWeight}</span>
-                  <span className="text-[8px] text-neutral-500 block">kg (BMI 22)</span>
-                </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">BMI Status Indicator</span>
+                <span className="font-extrabold text-sm">{goals.bmi} ({goals.bmiCat})</span>
+              </div>
+              <div className="relative w-full h-3 bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-visible mt-2">
+                <div className="absolute inset-y-0 left-0 w-[17.5%] bg-blue-400 rounded-l-full"></div>
+                <div className="absolute inset-y-0 left-[17.5%] w-[32.5%] bg-green-500"></div>
+                <div className="absolute inset-y-0 left-[50%] w-[25%] bg-yellow-500"></div>
+                <div className="absolute inset-y-0 left-[75%] w-[25%] bg-red-500 rounded-r-full"></div>
+                {/* Marker */}
+                <div 
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-white dark:bg-neutral-900 border-2 border-emerald-500 rounded-full shadow-md z-10 transition-all duration-500"
+                  style={{ left: `${getBmiPercentage(goals.bmi)}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between text-[9px] text-neutral-400 dark:text-neutral-500 mt-1 font-semibold">
+                <span>Underweight (&lt;18.5)</span>
+                <span>Normal (18.5-25)</span>
+                <span>Overweight (25-30)</span>
+                <span>Obese (&gt;30)</span>
               </div>
             </div>
 
-            {/* Fasting Setup */}
+            {/* Calculations Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-neutral-50 dark:bg-neutral-950/40 p-3 border border-neutral-200 dark:border-neutral-850 rounded-2xl text-center">
+                <span className="text-[9px] text-neutral-400 dark:text-neutral-500 uppercase font-bold">Basal Metabolic Rate (BMR)</span>
+                <span className="text-xl font-extrabold text-neutral-900 dark:text-white block mt-1">{goals.bmr} kcal</span>
+                <span className="text-[8px] text-neutral-500 block mt-0.5">Energy at total rest</span>
+              </div>
+              <div className="bg-neutral-50 dark:bg-neutral-950/40 p-3 border border-neutral-200 dark:border-neutral-850 rounded-2xl text-center">
+                <span className="text-[9px] text-neutral-400 dark:text-neutral-500 uppercase font-bold">Daily Active Energy (TDEE)</span>
+                <span className="text-xl font-extrabold text-neutral-900 dark:text-white block mt-1">{goals.tdee} kcal</span>
+                <span className="text-[8px] text-neutral-500 block mt-0.5">Total energy burn</span>
+              </div>
+            </div>
+
+            {/* Fasting Setup inside Step 2 */}
             <div className="space-y-3 bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl">
               <div className="flex justify-between items-center">
                 <div>
@@ -555,7 +677,7 @@ export default function Onboarding({ onComplete }) {
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
                     goals.includeFasting
                       ? 'bg-emerald-500 border-emerald-500 text-neutral-950 font-bold'
-                      : 'bg-neutral-200 dark:bg-neutral-800 border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'
+                      : 'bg-neutral-200 dark:bg-neutral-850 border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'
                   }`}
                 >
                   {goals.includeFasting ? 'Fasting Enabled ✓' : 'Fasting Disabled ✗'}
@@ -563,7 +685,7 @@ export default function Onboarding({ onComplete }) {
               </div>
 
               {goals.includeFasting && (
-                <div className="space-y-2 pt-2 border-t border-neutral-250 dark:border-neutral-800">
+                <div className="space-y-2 pt-2 border-t border-neutral-200 dark:border-neutral-800">
                   <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Pick fasting days:</span>
                   <div className="flex flex-wrap gap-1.5">
                     {daysOfWeek.map(day => {
@@ -584,10 +706,81 @@ export default function Onboarding({ onComplete }) {
                       );
                     })}
                   </div>
-                  <span className="text-[9px] text-neutral-500 block leading-tight">
-                    * On fasting days, calorie/protein targets will reduce automatically by 25% and light rest/cardio is suggested in your daily workouts.
-                  </span>
                 </div>
+              )}
+            </div>
+
+            {/* Editable Confirmation Box */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl">
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">Goal Weight (kg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  name="goalWeight"
+                  value={goals.goalWeight}
+                  onChange={handleGoalChange}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs text-neutral-950 dark:text-white text-center focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">Calorie Target (kcal)</label>
+                <input
+                  type="number"
+                  name="targetCalories"
+                  value={goals.targetCalories}
+                  onChange={handleGoalChange}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs text-neutral-950 dark:text-white text-center focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">Protein Target (g)</label>
+                <input
+                  type="number"
+                  name="targetProtein"
+                  value={goals.targetProtein}
+                  onChange={handleGoalChange}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs text-neutral-950 dark:text-white text-center focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">Water Target (Liters)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  name="targetWater"
+                  value={goals.targetWater}
+                  onChange={handleGoalChange}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs text-neutral-950 dark:text-white text-center focus:outline-none"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">Cigarettes Max Limit</label>
+                <input
+                  type="number"
+                  name="targetCigarettes"
+                  value={goals.targetCigarettes}
+                  onChange={handleGoalChange}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs text-neutral-950 dark:text-white text-center focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* AI Generated Plan Description */}
+            <div className="bg-emerald-500/5 dark:bg-emerald-500/[0.02] border border-emerald-500/20 rounded-2xl p-4 space-y-2 relative overflow-hidden">
+              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest block flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+                Coach's AI Recommendation Summary
+              </span>
+              {isLoadingSummary ? (
+                <div className="flex items-center gap-2 py-3 text-xs text-neutral-400 dark:text-neutral-550">
+                  <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                  Generating plan summary...
+                </div>
+              ) : (
+                <p className="text-xs text-neutral-700 dark:text-neutral-350 leading-relaxed font-sans select-text">
+                  {aiSummary || "Reviewing calculations based on your targets..."}
+                </p>
               )}
             </div>
 
@@ -599,103 +792,119 @@ export default function Onboarding({ onComplete }) {
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <button
-                onClick={handleNextStep}
-                className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-neutral-950 font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2"
+                onClick={() => setStep(3)}
+                className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-neutral-950 font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 animate-pulse"
               >
-                Configure Targets <ArrowRight className="w-4 h-4" />
+                Configure Meal slots <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 3: Confirmation */}
+        {/* STEP 3: Meal setup slots builder */}
         {step === 3 && (
-          <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
-            <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block text-center">Confirm and Adjust Targets</span>
+          <form onSubmit={handleFinishSetup} className="space-y-5 relative z-10 text-xs md:text-sm">
+            <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block text-center">Step 3: Meal Structure & Habits</span>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl">
-              <div>
-                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                  Target Goal Weight (kg)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  name="goalWeight"
-                  value={goals.goalWeight}
-                  onChange={handleGoalChange}
-                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-sm text-neutral-950 dark:text-white focus:outline-none text-center"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                  Daily Protein Target (g)
-                </label>
-                <input
-                  type="number"
-                  name="targetProtein"
-                  value={goals.targetProtein}
-                  onChange={handleGoalChange}
-                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-sm text-neutral-950 dark:text-white focus:outline-none text-center"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                  Daily Calories Target (kcal)
-                </label>
-                <input
-                  type="number"
-                  name="targetCalories"
-                  value={goals.targetCalories}
-                  onChange={handleGoalChange}
-                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-sm text-neutral-950 dark:text-white focus:outline-none text-center"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                  Water Intake (Liters)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  name="targetWater"
-                  value={goals.targetWater}
-                  onChange={handleGoalChange}
-                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-sm text-neutral-950 dark:text-white focus:outline-none text-center"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                  Cigarettes Limit / Day
-                </label>
-                <input
-                  type="number"
-                  name="targetCigarettes"
-                  value={goals.targetCigarettes}
-                  onChange={handleGoalChange}
-                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-sm text-neutral-950 dark:text-white focus:outline-none text-center"
-                />
-              </div>
+            {/* Diet Type Reminder Banner */}
+            <div className="bg-emerald-500/10 dark:bg-emerald-500/5 border border-emerald-550/20 p-3 rounded-2xl flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+              <span>Diet Selection: <strong className="capitalize">{info.dietType}</strong></span>
+              <span className="text-[10px] text-neutral-500">Filters warnings automatically</span>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={runCalculations}
-                className="py-2.5 px-3 bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 hover:border-neutral-400 text-neutral-750 dark:text-neutral-300 font-bold rounded-xl text-xs transition"
+            {/* Meal Count selector */}
+            <div className="flex items-center justify-between bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl">
+              <div>
+                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 block">How many times do you eat daily?</span>
+                <span className="text-[10px] text-neutral-400">Creates custom meal planning tags</span>
+              </div>
+              <select
+                value={mealCount}
+                onChange={(e) => setMealCount(parseInt(e.target.value))}
+                className="px-3 py-1.5 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs font-semibold focus:outline-none"
               >
-                Reset Formulas
-              </button>
-              
-              <span className="text-[10px] text-neutral-500 block self-center leading-tight">
-                * Generates custom progression matching: <strong>Foundation</strong> → <strong>Build</strong> → <strong>Intensity</strong> phases across {info.planDuration} months.
-              </span>
+                {[2, 3, 4, 5, 6].map(c => (
+                  <option key={c} value={c}>{c} Meals</option>
+                ))}
+              </select>
             </div>
 
+            {/* Dynamic Meal Slot Cards */}
+            <div className="space-y-3.5 max-h-[35vh] overflow-y-auto pr-1">
+              {mealsList.map((meal) => (
+                <div key={meal.id} className="bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl space-y-3 relative">
+                  
+                  {/* Meal label & Time picker */}
+                  <div className="flex flex-col sm:flex-row gap-2 justify-between sm:items-center">
+                    <input
+                      type="text"
+                      value={meal.label}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setMealsList(prev => prev.map(m => m.id === meal.id ? { ...m, label: val } : m));
+                      }}
+                      className="font-bold text-neutral-900 dark:text-white bg-transparent border-b border-dashed border-neutral-300 focus:border-emerald-500 focus:outline-none text-xs"
+                    />
+                    <input
+                      type="time"
+                      value={meal.time}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setMealsList(prev => prev.map(m => m.id === meal.id ? { ...m, time: val } : m));
+                      }}
+                      className="px-2 py-1 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-lg text-[10px] focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Tag Chips list */}
+                  <div className="flex flex-wrap gap-1">
+                    {meal.foods.length > 0 ? (
+                      meal.foods.map((food, foodIdx) => (
+                        <span 
+                          key={foodIdx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-[10px] text-neutral-600 dark:text-neutral-300 font-bold rounded-lg"
+                        >
+                          {food}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFoodItem(meal.id, foodIdx)}
+                            className="text-neutral-400 hover:text-red-500"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[10px] text-neutral-400 italic">No food items added yet</span>
+                    )}
+                  </div>
+
+                  {/* Add Food Input */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. 2 eggs, sabzi, curd"
+                      value={tempFoodInput[meal.id] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTempFoodInput(prev => ({ ...prev, [meal.id]: val }));
+                      }}
+                      className="flex-1 px-3 py-1.5 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs focus:outline-none placeholder-neutral-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddFoodItem(meal.id)}
+                      className="px-3 bg-emerald-500 hover:bg-emerald-650 text-neutral-950 font-bold rounded-xl text-xs active:scale-95 transition"
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+
+            {/* Buttons */}
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
@@ -710,7 +919,7 @@ export default function Onboarding({ onComplete }) {
                 className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-neutral-950 font-extrabold rounded-xl shadow-lg transition flex items-center justify-center gap-2"
               >
                 <ShieldCheck className="w-5 h-5 stroke-[2.5px]" />
-                Generate My Plan!
+                Finish Setup!
               </button>
             </div>
           </form>

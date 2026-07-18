@@ -120,11 +120,6 @@ export default function Login({ onLoginSuccess }) {
         {/* Google sign-in container */}
         <div className="flex flex-col items-center justify-center space-y-3 pt-2 relative z-10">
           <div id="google-btn-container" className="min-h-10"></div>
-          
-          <div className="flex items-center gap-2 bg-neutral-50 dark:bg-neutral-950/40 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-850 max-w-xs text-[10px] text-neutral-500 leading-tight">
-            <AlertCircle className="w-4 h-4 text-orange-500 shrink-0" />
-            <span>Google Login requires setup in Google Dev Console. Use Guest Login below to test the app immediately.</span>
-          </div>
         </div>
 
         <div className="relative flex py-2 items-center text-xs text-neutral-400 uppercase tracking-widest relative z-10">
