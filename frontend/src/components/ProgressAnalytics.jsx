@@ -56,7 +56,7 @@ export default function ProgressAnalytics({ profile, dailyLogs, weeklyCheckIns }
   const renderWeightChart = () => {
     if (weightData.length < 2) {
       return (
-        <div className="h-48 flex items-center justify-center text-xs text-neutral-500 italic bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl border border-neutral-200 dark:border-neutral-850">
+        <div className="h-48 flex items-center justify-center text-xs text-neutral-500 italic bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl border border-neutral-200 dark:border-neutral-800">
           Not enough data yet. Complete Sunday check-ins to generate the trend line.
         </div>
       );
@@ -136,7 +136,7 @@ export default function ProgressAnalytics({ profile, dailyLogs, weeklyCheckIns }
   const renderCigChart = () => {
     if (cigData.length < 2) {
       return (
-        <div className="h-48 flex items-center justify-center text-xs text-neutral-500 italic bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl border border-neutral-200 dark:border-neutral-850">
+        <div className="h-48 flex items-center justify-center text-xs text-neutral-500 italic bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl border border-neutral-200 dark:border-neutral-800">
           Log cigarettes for a few days to view the trend.
         </div>
       );
@@ -241,7 +241,7 @@ export default function ProgressAnalytics({ profile, dailyLogs, weeklyCheckIns }
   const renderCompletionChart = () => {
     if (weeklyCompletions.length === 0) {
       return (
-        <div className="h-48 flex items-center justify-center text-xs text-neutral-500 italic bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl border border-neutral-200 dark:border-neutral-850">
+        <div className="h-48 flex items-center justify-center text-xs text-neutral-500 italic bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl border border-neutral-200 dark:border-neutral-800">
           Complete daily workouts to generate weekly completions bar charts.
         </div>
       );
@@ -428,7 +428,7 @@ export default function ProgressAnalytics({ profile, dailyLogs, weeklyCheckIns }
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-2 text-center">
               <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 block">Before ({formatUIDate(beforePhoto.date)})</span>
-              <div className="aspect-square border border-neutral-200 dark:border-neutral-850 rounded-2xl overflow-hidden bg-neutral-100 dark:bg-neutral-950">
+              <div className="aspect-square border border-neutral-200 dark:border-neutral-800 rounded-2xl overflow-hidden bg-neutral-100 dark:bg-neutral-950">
                 <img 
                   src={beforePhoto.photo} 
                   alt="Before" 
@@ -440,7 +440,7 @@ export default function ProgressAnalytics({ profile, dailyLogs, weeklyCheckIns }
 
             <div className="space-y-2 text-center">
               <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 block">Latest ({formatUIDate(nowPhoto ? nowPhoto.date : beforePhoto.date)})</span>
-              <div className="aspect-square border border-neutral-200 dark:border-neutral-850 rounded-2xl overflow-hidden bg-neutral-100 dark:bg-neutral-950">
+              <div className="aspect-square border border-neutral-200 dark:border-neutral-800 rounded-2xl overflow-hidden bg-neutral-100 dark:bg-neutral-950">
                 <img 
                   src={nowPhoto ? nowPhoto.photo : beforePhoto.photo} 
                   alt="Now" 

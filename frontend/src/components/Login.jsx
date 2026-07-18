@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Award, ShieldCheck, Mail, User, Sparkles, AlertCircle } from 'lucide-react';
+import Logo from './Logo';
 
 export default function Login({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -108,8 +109,8 @@ export default function Login({ onLoginSuccess }) {
 
         {/* Logo and Greeting */}
         <div className="text-center space-y-2 relative z-10">
-          <div className="inline-flex p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-500 dark:text-emerald-400 mb-1">
-            <ShieldCheck className="w-8 h-8 stroke-[2.5px]" />
+          <div className="inline-flex mb-1">
+            <Logo className="w-16 h-16 animate-pulse" />
           </div>
           <h2 className="text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-white">Welcome to FitHabit</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">

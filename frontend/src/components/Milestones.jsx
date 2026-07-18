@@ -146,7 +146,7 @@ export default function Milestones({
         
         {/* Form Container */}
         <div id="log-form" className="lg:col-span-5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-5 transition-colors duration-200">
-          <h3 className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight border-b border-neutral-200 dark:border-neutral-850 pb-3">
+          <h3 className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight border-b border-neutral-200 dark:border-neutral-800 pb-3">
             New Sunday Check-in
           </h3>
 
@@ -250,7 +250,7 @@ export default function Milestones({
 
         {/* Trends Container */}
         <div className="lg:col-span-7 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-6 transition-colors duration-200">
-          <h3 className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight border-b border-neutral-200 dark:border-neutral-850 pb-3">
+          <h3 className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight border-b border-neutral-200 dark:border-neutral-800 pb-3">
             Milestone Insights
           </h3>
 
@@ -289,7 +289,7 @@ export default function Milestones({
 
           {/* Change Stats */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-neutral-50 dark:bg-neutral-950/40 border border-neutral-200 dark:border-neutral-850 p-4 rounded-2xl text-center space-y-1">
+            <div className="bg-neutral-50 dark:bg-neutral-950/40 border border-neutral-200 dark:border-neutral-800 p-4 rounded-2xl text-center space-y-1">
               <span className="text-xs font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider block">Vs Start Weight</span>
               <div className="flex items-center justify-center gap-1.5">
                 {stats.changeVsStart < 0 ? (
@@ -306,7 +306,7 @@ export default function Milestones({
               <span className="text-[10px] text-neutral-400 dark:text-neutral-500 block">Baseline: {profile.startingWeight} kg</span>
             </div>
 
-            <div className="bg-neutral-50 dark:bg-neutral-950/40 border border-neutral-200 dark:border-neutral-850 p-4 rounded-2xl text-center space-y-1">
+            <div className="bg-neutral-50 dark:bg-neutral-950/40 border border-neutral-200 dark:border-neutral-800 p-4 rounded-2xl text-center space-y-1">
               <span className="text-xs font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider block">Vs Last Week</span>
               <div className="flex items-center justify-center gap-1.5">
                 {stats.changeVsLast < 0 ? (
@@ -342,7 +342,7 @@ export default function Milestones({
                   </thead>
                   <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800 text-xs">
                     {weeklyCheckIns.map((check) => (
-                      <tr key={check.date} className="hover:bg-neutral-50 dark:hover:bg-neutral-850/40 text-neutral-700 dark:text-neutral-350">
+                      <tr key={check.date} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/40 text-neutral-700 dark:text-neutral-350">
                         <td className="px-4 py-3 font-semibold">{formatUIDate(check.date)}</td>
                         <td className="px-4 py-3 font-bold text-neutral-900 dark:text-white">{check.weight} kg</td>
                         <td className="px-4 py-3">
@@ -374,7 +374,7 @@ export default function Milestones({
                 </table>
               </div>
             ) : (
-              <p className="text-xs text-neutral-450 dark:text-neutral-500 italic text-center py-4 bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl border border-neutral-200 dark:border-neutral-850">
+              <p className="text-xs text-neutral-450 dark:text-neutral-500 italic text-center py-4 bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl border border-neutral-200 dark:border-neutral-800">
                 No milestone check-ins recorded yet.
               </p>
             )}

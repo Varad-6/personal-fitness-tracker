@@ -33,12 +33,35 @@ export default function Dashboard({
 
   // Get quote of the day (date-hashed so it's stable all day)
   useEffect(() => {
+    // 1. Set local fallback first
     const today = new Date();
     const start = new Date(today.getFullYear(), 0, 0);
     const diff = today - start;
     const oneDay = 1000 * 60 * 60 * 24;
     const dayOfYear = Math.floor(diff / oneDay);
-    setQuote(quotes[dayOfYear % quotes.length]);
+    const localFallback = quotes[dayOfYear % quotes.length];
+    setQuote(localFallback);
+
+    // 2. Fetch from backend deterministic DB endpoint
+    const fetchQuote = async () => {
+      try {
+        const token = localStorage.getItem('fithabit_token');
+        const headers = {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        };
+        const res = await fetch('/api/quote-of-the-day', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.text) {
+            setQuote(`"${data.text}" — ${data.author}`);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch daily quote from backend database", e);
+      }
+    };
+    fetchQuote();
   }, []);
 
   // Today's weekday name (e.g., "Monday")
@@ -281,7 +304,7 @@ export default function Dashboard({
             </button>
             <button
               onClick={() => onNavigate('calendar')}
-              className="w-full sm:w-auto px-5 py-3 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white bg-neutral-100/40 dark:bg-neutral-800/40 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-250 dark:border-neutral-850 hover:border-neutral-400 rounded-2xl font-bold transition flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-5 py-3 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white bg-neutral-100/40 dark:bg-neutral-800/40 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-250 dark:border-neutral-800 hover:border-neutral-400 rounded-2xl font-bold transition flex items-center justify-center gap-2"
             >
               Log Daily Details
               <ChevronRight className="w-4 h-4" />

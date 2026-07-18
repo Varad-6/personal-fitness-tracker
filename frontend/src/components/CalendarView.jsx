@@ -307,7 +307,7 @@ export default function CalendarView({
                     ? 'bg-orange-500/10 border-orange-500 text-orange-600 dark:text-orange-400 font-bold scale-102 shadow-sm' 
                     : isToday
                       ? 'bg-neutral-100 dark:bg-neutral-800 border-neutral-300 dark:border-neutral-700 font-semibold'
-                      : 'bg-neutral-50/50 dark:bg-neutral-950/40 border-neutral-200 dark:border-neutral-850 hover:border-neutral-400 dark:hover:border-neutral-700'
+                      : 'bg-neutral-50/50 dark:bg-neutral-950/40 border-neutral-200 dark:border-neutral-800 hover:border-neutral-400 dark:hover:border-neutral-700'
                 }`}
               >
                 <span className="text-xs mt-1">{day.dayNum}</span>
@@ -411,7 +411,7 @@ export default function CalendarView({
                 </p>
               </div>
             ) : (
-              <div className="space-y-2 bg-neutral-50 dark:bg-neutral-950/40 border border-neutral-200 dark:border-neutral-850 rounded-2xl p-3">
+              <div className="space-y-2 bg-neutral-50 dark:bg-neutral-950/40 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-3">
                 {workout.exercises.map((ex) => {
                   const isChecked = !!log.exercisesCompleted?.[ex.id];
                   return (
@@ -476,7 +476,7 @@ export default function CalendarView({
                 {log.proteinLog.map((meal) => (
                   <div 
                     key={meal.id} 
-                    className="flex justify-between items-center bg-neutral-50 dark:bg-neutral-950/40 border border-neutral-200 dark:border-neutral-850 p-2.5 rounded-xl text-sm"
+                    className="flex justify-between items-center bg-neutral-50 dark:bg-neutral-950/40 border border-neutral-200 dark:border-neutral-800 p-2.5 rounded-xl text-sm"
                   >
                     <div>
                       <span className="font-semibold text-neutral-800 dark:text-neutral-200 block">{meal.name}</span>
@@ -519,14 +519,14 @@ export default function CalendarView({
           </div>
 
           {/* AI Natural Language Food Logger */}
-          <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl space-y-3">
+          <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1.5 font-sans">
                 <Sparkles className="w-3.5 h-3.5 text-orange-400" />
                 AI Smart Food Logger & Parsing
               </span>
               <span className="text-[9px] text-neutral-400 dark:text-neutral-550">
-                Powered by Gemini AI
+                Powered by FitHabit AI
               </span>
             </div>
             
@@ -550,7 +550,7 @@ export default function CalendarView({
 
             {parsedFoodResult && (
               <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3 space-y-3 mt-2 animate-fade-in">
-                <div className="flex justify-between items-center border-b border-neutral-100 dark:border-neutral-850 pb-1.5">
+                <div className="flex justify-between items-center border-b border-neutral-100 dark:border-neutral-800 pb-1.5">
                   <span className="text-[10px] font-bold text-neutral-500 uppercase">Estimated Nutrition Details</span>
                   <div className="flex gap-2 text-[10px] font-bold">
                     <span className="text-orange-500">{parsedFoodResult.totalCalories} kcal</span>
@@ -562,7 +562,7 @@ export default function CalendarView({
                   {parsedFoodResult.items.map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center text-xs">
                       <div>
-                        <span className="font-semibold text-neutral-850 dark:text-neutral-200">{item.name}</span>
+                        <span className="font-semibold text-neutral-800 dark:text-neutral-200">{item.name}</span>
                         <span className="text-[9px] text-neutral-400 dark:text-neutral-500 block">Qty: {item.quantity} • Carbs: {item.carbs}g • Fat: {item.fat}g</span>
                       </div>
                       <span className="font-bold text-neutral-600 dark:text-neutral-300">+{item.protein}g</span>
@@ -582,7 +582,7 @@ export default function CalendarView({
           </div>
 
           {/* Manual Entry Form */}
-          <div className="flex flex-col sm:flex-row gap-2 bg-neutral-50 dark:bg-neutral-950/40 p-3 rounded-2xl border border-neutral-200 dark:border-neutral-850">
+          <div className="flex flex-col sm:flex-row gap-2 bg-neutral-50 dark:bg-neutral-950/40 p-3 rounded-2xl border border-neutral-200 dark:border-neutral-800">
             <input
               type="text"
               placeholder="Meal description (e.g. Curd & Oats)"
@@ -653,7 +653,7 @@ export default function CalendarView({
             <div className="flex bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl overflow-hidden shadow-sm">
               <button 
                 onClick={() => updateLogProperty('water', Math.max(0, (log.water || 0) - 1))}
-                className="flex-1 py-2 text-neutral-400 hover:text-neutral-850 dark:hover:text-white transition font-bold"
+                className="flex-1 py-2 text-neutral-400 hover:text-neutral-800 dark:hover:text-white transition font-bold"
               >
                 -
               </button>
@@ -662,7 +662,7 @@ export default function CalendarView({
               </span>
               <button 
                 onClick={() => updateLogProperty('water', (log.water || 0) + 1)}
-                className="flex-1 py-2 text-neutral-400 hover:text-neutral-850 dark:hover:text-white transition font-bold"
+                className="flex-1 py-2 text-neutral-400 hover:text-neutral-800 dark:hover:text-white transition font-bold"
               >
                 +
               </button>
@@ -676,7 +676,7 @@ export default function CalendarView({
             <div className="flex bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl overflow-hidden shadow-sm">
               <button 
                 onClick={() => updateLogProperty('cigarettes', Math.max(0, (log.cigarettes || 0) - 1))}
-                className="flex-1 py-2 text-neutral-400 hover:text-neutral-850 dark:hover:text-white transition font-bold"
+                className="flex-1 py-2 text-neutral-400 hover:text-neutral-800 dark:hover:text-white transition font-bold"
               >
                 -
               </button>
@@ -685,7 +685,7 @@ export default function CalendarView({
               </span>
               <button 
                 onClick={() => updateLogProperty('cigarettes', (log.cigarettes || 0) + 1)}
-                className="flex-1 py-2 text-neutral-400 hover:text-neutral-850 dark:hover:text-white transition font-bold"
+                className="flex-1 py-2 text-neutral-400 hover:text-neutral-800 dark:hover:text-white transition font-bold"
               >
                 +
               </button>

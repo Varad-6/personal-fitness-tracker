@@ -150,7 +150,7 @@ export default function WorkoutLibrary({
       <div className="lg:col-span-8 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-6 transition-colors duration-200">
         
         {/* Phase selection pills */}
-        <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-none border-b border-neutral-200 dark:border-neutral-850">
+        <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-none border-b border-neutral-200 dark:border-neutral-800">
           {phases.map((phase) => (
             <button
               key={phase}
@@ -175,7 +175,7 @@ export default function WorkoutLibrary({
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition border ${
                 selectedDay === day
                   ? 'bg-neutral-100 dark:bg-neutral-800 border-neutral-300 dark:border-neutral-700 text-neutral-950 dark:text-white font-bold'
-                  : 'bg-neutral-50/50 dark:bg-neutral-955/40 border-neutral-200 dark:border-neutral-850 text-neutral-450 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  : 'bg-neutral-50/50 dark:bg-neutral-900/40 border-neutral-200 dark:border-neutral-800 text-neutral-450 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
               }`}
             >
               {day.slice(0, 3)}
@@ -213,7 +213,7 @@ export default function WorkoutLibrary({
 
           {/* Add Exercise Form */}
           {isAdding && (
-            <form onSubmit={handleAddExercise} className="bg-neutral-50 dark:bg-neutral-955/40 border border-neutral-200 dark:border-neutral-850 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <form onSubmit={handleAddExercise} className="bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200 dark:border-neutral-800 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-12 gap-3">
               <div className="sm:col-span-4">
                 <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 block mb-1">Exercise Name</label>
                 <input
@@ -270,7 +270,7 @@ export default function WorkoutLibrary({
 
           {/* Exercises list */}
           {selectedDay.includes('Sunday') ? (
-            <div className="p-8 border border-neutral-200 dark:border-neutral-850 bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl text-center text-xs text-neutral-550 transition-colors duration-200">
+            <div className="p-8 border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/20 rounded-2xl text-center text-xs text-neutral-550 transition-colors duration-200">
               🛌 Sunday is rest, recovery, and check-in day! No gym sessions scheduled.
             </div>
           ) : currentDayPlan.exercises.length === 0 ? (
@@ -284,7 +284,7 @@ export default function WorkoutLibrary({
                 
                 if (isEditing) {
                   return (
-                    <div key={ex.id} className="bg-neutral-50 dark:bg-neutral-950/60 border border-neutral-200 dark:border-neutral-850 p-3.5 rounded-2xl grid grid-cols-1 sm:grid-cols-12 gap-3 items-center transition-colors">
+                    <div key={ex.id} className="bg-neutral-50 dark:bg-neutral-950/60 border border-neutral-200 dark:border-neutral-800 p-3.5 rounded-2xl grid grid-cols-1 sm:grid-cols-12 gap-3 items-center transition-colors">
                       <div className="sm:col-span-4">
                         <input
                           type="text"
@@ -343,14 +343,14 @@ export default function WorkoutLibrary({
                 return (
                   <div 
                     key={ex.id}
-                    className="flex justify-between items-center bg-neutral-50/50 dark:bg-neutral-950/20 border border-neutral-200 dark:border-neutral-850 p-3 rounded-2xl hover:border-neutral-350 dark:hover:border-neutral-750 transition"
+                    className="flex justify-between items-center bg-neutral-50/50 dark:bg-neutral-950/20 border border-neutral-200 dark:border-neutral-800 p-3 rounded-2xl hover:border-neutral-350 dark:hover:border-neutral-750 transition"
                   >
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-neutral-100 dark:bg-neutral-800 rounded-xl text-orange-500 dark:text-orange-400">
                         <Dumbbell className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="text-sm font-bold text-neutral-850 dark:text-neutral-200 block">{ex.name}</span>
+                        <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 block">{ex.name}</span>
                         <span className="text-[10px] text-neutral-450 dark:text-neutral-500 uppercase tracking-widest font-semibold block">{ex.muscleGroup}</span>
                       </div>
                     </div>
@@ -363,14 +363,14 @@ export default function WorkoutLibrary({
                       <div className="flex gap-1">
                         <button
                           onClick={() => startEdit(ex)}
-                          className="p-1.5 bg-neutral-105 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 text-neutral-550 hover:text-neutral-900 dark:hover:text-white rounded-lg transition"
+                          className="p-1.5 bg-neutral-100 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 text-neutral-550 hover:text-neutral-900 dark:hover:text-white rounded-lg transition"
                           title="Edit Exercise"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => deleteExercise(ex.id)}
-                          className="p-1.5 bg-neutral-105 dark:bg-neutral-850/50 border border-neutral-250 dark:border-neutral-800/80 text-neutral-400 hover:text-red-500 rounded-lg transition"
+                          className="p-1.5 bg-neutral-100 dark:bg-neutral-800/50 border border-neutral-250 dark:border-neutral-800/80 text-neutral-400 hover:text-red-500 rounded-lg transition"
                           title="Delete Exercise"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

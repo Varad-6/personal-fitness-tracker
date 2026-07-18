@@ -425,9 +425,9 @@ export default function Onboarding({ onComplete }) {
             </div>
 
             {/* Animation Content Slots (Rotates every 5 seconds) */}
-            <div className="bg-neutral-850 border border-neutral-800 rounded-2xl p-6 min-h-[140px] flex items-center justify-center text-sm shadow-xl">
+            <div key={generationStep} className="bg-neutral-800 border border-neutral-800 rounded-2xl p-6 min-h-[140px] flex items-center justify-center text-sm shadow-xl animate-wizard-fade-in">
               {generationStep === 0 && (
-                <div className="space-y-3 animate-wizard-fade-in">
+                <div className="space-y-3">
                   <Flame className="w-6 h-6 text-orange-400 mx-auto" />
                   <p className="italic font-medium text-neutral-250">"{motivationalQuotes[0].text}"</p>
                   <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">— {motivationalQuotes[0].author}</span>
@@ -435,7 +435,7 @@ export default function Onboarding({ onComplete }) {
               )}
 
               {generationStep === 1 && (
-                <div className="space-y-2 animate-wizard-fade-in">
+                <div className="space-y-2">
                   <Activity className="w-6 h-6 text-emerald-400 mx-auto animate-pulse" />
                   <span className="text-[10px] uppercase tracking-wider text-orange-400 font-bold block">Did you know?</span>
                   <p className="text-neutral-300 font-medium">{fitnessFacts[Math.floor(Math.random() * fitnessFacts.length)]}</p>
@@ -443,7 +443,7 @@ export default function Onboarding({ onComplete }) {
               )}
 
               {generationStep === 2 && (
-                <div className="space-y-3 w-full animate-wizard-fade-in text-left text-xs text-neutral-300">
+                <div className="space-y-3 w-full text-left text-xs text-neutral-300">
                   <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block text-center mb-1">Building Blocks Checklist</span>
                   <div className="space-y-2 max-w-xs mx-auto">
                     <div className="flex items-center gap-2 text-emerald-400"><CheckCircle2 className="w-4 h-4" /> BMI Metrics Calculated</div>
@@ -454,7 +454,7 @@ export default function Onboarding({ onComplete }) {
               )}
 
               {generationStep === 3 && (
-                <div className="space-y-2.5 animate-wizard-fade-in">
+                <div className="space-y-2.5">
                   <Heart className="w-6 h-6 text-red-400 mx-auto" />
                   <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Tailoring Personal Plan</span>
                   <p className="text-neutral-200 font-medium">
@@ -499,7 +499,7 @@ export default function Onboarding({ onComplete }) {
               <span>Screen {screen} of 10</span>
             </div>
             
-            <div className="w-full bg-neutral-100 dark:bg-neutral-850 h-1.5 rounded-full overflow-hidden">
+            <div className="w-full bg-neutral-100 dark:bg-neutral-800 h-1.5 rounded-full overflow-hidden">
               <div 
                 className="bg-emerald-500 h-full rounded-full transition-all duration-300"
                 style={{ width: `${currentProgressPercent}%` }}
@@ -528,7 +528,7 @@ export default function Onboarding({ onComplete }) {
                     placeholder="e.g. Varad"
                     value={info.name}
                     onChange={handleInfoChange}
-                    className="block w-full pl-10 pr-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition text-sm"
+                    className="block w-full pl-10 pr-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition text-sm"
                   />
                 </div>
               </div>
@@ -556,7 +556,7 @@ export default function Onboarding({ onComplete }) {
                       className={`w-full text-left p-3.5 rounded-2xl border text-xs font-semibold transition flex flex-col gap-0.5 ${
                         info.primaryGoal === item.val
                           ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-neutral-50 dark:bg-neutral-850 border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-350 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                          : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-350 hover:bg-neutral-100 dark:hover:bg-neutral-800'
                       }`}
                     >
                       <span className="font-extrabold text-sm">{item.label}</span>
@@ -584,7 +584,7 @@ export default function Onboarding({ onComplete }) {
                       max="120"
                       value={info.age}
                       onChange={handleInfoChange}
-                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                     />
                   </div>
 
@@ -599,7 +599,7 @@ export default function Onboarding({ onComplete }) {
                           className={`py-3.5 rounded-2xl border text-sm font-bold transition capitalize ${
                             info.gender === g
                               ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-neutral-50 dark:bg-neutral-850 border-neutral-200 dark:border-neutral-800 text-neutral-500 dark:text-neutral-400'
+                              : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-800 text-neutral-500 dark:text-neutral-400'
                           }`}
                         >
                           {g}
@@ -627,7 +627,7 @@ export default function Onboarding({ onComplete }) {
                         name="heightFeet"
                         value={info.heightFeet}
                         onChange={handleInfoChange}
-                        className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                        className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                       >
                         {['3', '4', '5', '6', '7'].map(f => (
                           <option key={f} value={f}>{f} ft</option>
@@ -640,7 +640,7 @@ export default function Onboarding({ onComplete }) {
                         name="heightInches"
                         value={info.heightInches}
                         onChange={handleInfoChange}
-                        className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                        className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                       >
                         {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'].map(i => (
                           <option key={i} value={i}>{i} in</option>
@@ -657,7 +657,7 @@ export default function Onboarding({ onComplete }) {
                       step="0.1"
                       value={info.startingWeight}
                       onChange={handleInfoChange}
-                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                     />
                   </div>
                 </div>
@@ -679,7 +679,7 @@ export default function Onboarding({ onComplete }) {
                       name="country"
                       value={info.country}
                       onChange={handleInfoChange}
-                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                     >
                       <option value="India">India (Indian Meals)</option>
                       <option value="United States">United States</option>
@@ -694,7 +694,7 @@ export default function Onboarding({ onComplete }) {
                       name="dietType"
                       value={info.dietType}
                       onChange={handleInfoChange}
-                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                     >
                       <option value="vegetarian">Vegetarian</option>
                       <option value="non-vegetarian">Non-Vegetarian</option>
@@ -722,7 +722,7 @@ export default function Onboarding({ onComplete }) {
                       name="planDuration"
                       value={info.planDuration}
                       onChange={handleInfoChange}
-                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                     >
                       <option value="1">1 Month (4 Weeks)</option>
                       <option value="2">2 Months (8 Weeks)</option>
@@ -737,7 +737,7 @@ export default function Onboarding({ onComplete }) {
                       name="workoutTimeAvailable"
                       value={info.workoutTimeAvailable}
                       onChange={handleInfoChange}
-                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                     >
                       <option value="30 min">30 min (Shorter split volume)</option>
                       <option value="1 hr">1 hr (Standard split volume)</option>
@@ -778,7 +778,7 @@ export default function Onboarding({ onComplete }) {
                             className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold border transition ${
                               isSelected
                                 ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-                                : 'bg-neutral-50 dark:bg-neutral-850 border-neutral-200 dark:border-neutral-800 text-neutral-500'
+                                : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-800 text-neutral-500'
                             }`}
                           >
                             {cond}
@@ -794,7 +794,7 @@ export default function Onboarding({ onComplete }) {
                       name="activityLevel"
                       value={info.activityLevel}
                       onChange={handleInfoChange}
-                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                     >
                       <option value="sedentary">Sedentary (desk job)</option>
                       <option value="light">Lightly Active (active daily lifestyle)</option>
@@ -835,7 +835,7 @@ export default function Onboarding({ onComplete }) {
                             className={`px-3 py-2 rounded-xl text-xs font-bold border transition ${
                               isRest
                                 ? 'bg-orange-500/10 border-orange-500 text-orange-600 dark:text-orange-400'
-                                : 'bg-neutral-50 dark:bg-neutral-850 border-neutral-200 dark:border-neutral-800 text-neutral-500'
+                                : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-800 text-neutral-500'
                             }`}
                           >
                             {day.slice(0, 3)}
@@ -852,7 +852,7 @@ export default function Onboarding({ onComplete }) {
                       name="cigarettes"
                       value={info.cigarettes}
                       onChange={handleInfoChange}
-                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-850 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
+                      className="block w-full px-3 py-3 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-750 rounded-2xl text-neutral-950 dark:text-white text-sm focus:outline-none"
                     />
                   </div>
                 </div>
@@ -868,7 +868,7 @@ export default function Onboarding({ onComplete }) {
                 </div>
 
                 {/* BMI Gauge card */}
-                <div className="bg-neutral-50 dark:bg-neutral-850/40 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl space-y-3">
+                <div className="bg-neutral-50 dark:bg-neutral-800/40 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">BMI Status Gauge</span>
                     <span className="font-black text-sm">{goals.bmi} ({goals.bmiCat})</span>
@@ -894,18 +894,18 @@ export default function Onboarding({ onComplete }) {
 
                 {/* BMR / TDEE Cards */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-neutral-50 dark:bg-neutral-850/45 p-3 border border-neutral-200 dark:border-neutral-800 rounded-2xl text-center">
+                  <div className="bg-neutral-50 dark:bg-neutral-800/45 p-3 border border-neutral-200 dark:border-neutral-800 rounded-2xl text-center">
                     <span className="text-[9px] text-neutral-400 dark:text-neutral-500 uppercase font-extrabold">Basal Metabolic Rate</span>
                     <span className="text-lg font-black text-neutral-900 dark:text-white block mt-1">{goals.bmr} kcal</span>
                   </div>
-                  <div className="bg-neutral-50 dark:bg-neutral-850/45 p-3 border border-neutral-200 dark:border-neutral-800 rounded-2xl text-center">
+                  <div className="bg-neutral-50 dark:bg-neutral-800/45 p-3 border border-neutral-200 dark:border-neutral-800 rounded-2xl text-center">
                     <span className="text-[9px] text-neutral-400 dark:text-neutral-500 uppercase font-extrabold">Daily Active Burn (TDEE)</span>
                     <span className="text-lg font-black text-neutral-900 dark:text-white block mt-1">{goals.tdee} kcal</span>
                   </div>
                 </div>
 
                 {/* Intermittent Fasting Setup */}
-                <div className="bg-neutral-50 dark:bg-neutral-850/45 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl space-y-3">
+                <div className="bg-neutral-50 dark:bg-neutral-800/45 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl space-y-3">
                   <div className="flex justify-between items-center">
                     <div>
                       <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block">Intermittent Fasting</span>
@@ -958,7 +958,7 @@ export default function Onboarding({ onComplete }) {
                 </div>
 
                 {/* Target Confirmation Form */}
-                <div className="grid grid-cols-2 gap-3 bg-neutral-50 dark:bg-neutral-850/45 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl">
+                <div className="grid grid-cols-2 gap-3 bg-neutral-50 dark:bg-neutral-800/45 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl">
                   <div>
                     <label className="text-[9px] font-bold text-neutral-450 uppercase block mb-1">Goal Weight (kg)</label>
                     <input
@@ -1003,7 +1003,7 @@ export default function Onboarding({ onComplete }) {
                   </div>
                 </div>
 
-                {/* Gemini Recommendation Summary */}
+                {/* FitHabit AI Recommendation Summary */}
                 <div className="bg-emerald-500/5 dark:bg-emerald-500/[0.02] border border-emerald-500/20 rounded-2xl p-4 space-y-2 relative overflow-hidden">
                   <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest block flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-orange-400" />
@@ -1023,114 +1023,6 @@ export default function Onboarding({ onComplete }) {
               </div>
             )}
 
-            {/* Screen 10: Meal Rhythm Slots Setup (Old Step 3) */}
-            {screen === 10 && (
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <h3 className="text-xl font-extrabold text-neutral-900 dark:text-white">Setup Your Meal Rhythm</h3>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400">Configure meal slots and prefill typical items</p>
-                </div>
-
-                {/* Diet Type Reminder Banner */}
-                <div className="bg-emerald-500/10 dark:bg-emerald-500/5 border border-emerald-550/20 p-3 rounded-2xl flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <span>Diet preference: <strong className="capitalize">{info.dietType}</strong></span>
-                  <span className="text-[10px] text-neutral-500">Diet validator enabled</span>
-                </div>
-
-                {/* Meal Count selector */}
-                <div className="flex items-center justify-between bg-neutral-50 dark:bg-neutral-850/40 p-3 border border-neutral-200 dark:border-neutral-800 rounded-2xl">
-                  <div>
-                    <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 block">How many times do you eat per day?</span>
-                    <span className="text-[10px] text-neutral-400">Creates slots for breakfast, snacks, etc.</span>
-                  </div>
-                  <select
-                    value={mealCount}
-                    onChange={(e) => setMealCount(parseInt(e.target.value))}
-                    className="px-3 py-1.5 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs font-semibold focus:outline-none"
-                  >
-                    {[2, 3, 4, 5, 6].map(c => (
-                      <option key={c} value={c}>{c} Meals</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Dynamic Meal Slot Cards */}
-                <div className="space-y-3.5 max-h-[30vh] overflow-y-auto pr-1">
-                  {mealsList.map((meal) => (
-                    <div key={meal.id} className="bg-neutral-50 dark:bg-neutral-850/40 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl space-y-3 relative">
-                      
-                      {/* Meal label & Time picker */}
-                      <div className="flex justify-between items-center">
-                        <input
-                          type="text"
-                          value={meal.label}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setMealsList(prev => prev.map(m => m.id === meal.id ? { ...m, label: val } : m));
-                          }}
-                          className="font-bold text-neutral-900 dark:text-white bg-transparent border-b border-dashed border-neutral-300 focus:border-emerald-500 focus:outline-none text-xs"
-                        />
-                        <input
-                          type="time"
-                          value={meal.time}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setMealsList(prev => prev.map(m => m.id === meal.id ? { ...m, time: val } : m));
-                          }}
-                          className="px-2 py-1 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-lg text-[10px] focus:outline-none"
-                        />
-                      </div>
-
-                      {/* Tag Chips list */}
-                      <div className="flex flex-wrap gap-1">
-                        {meal.foods.length > 0 ? (
-                          meal.foods.map((food, foodIdx) => (
-                            <span 
-                              key={foodIdx}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-[10px] text-neutral-600 dark:text-neutral-300 font-bold rounded-lg"
-                            >
-                              {food}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveFoodItem(meal.id, foodIdx)}
-                                className="text-neutral-400 hover:text-red-500"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-[10px] text-neutral-400 italic">No typical food items logged</span>
-                        )}
-                      </div>
-
-                      {/* Add Food Input */}
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="e.g. 2 chapatis, salad, yogurt"
-                          value={tempFoodInput[meal.id] || ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setTempFoodInput(prev => ({ ...prev, [meal.id]: val }));
-                          }}
-                          className="flex-1 px-3 py-1.5 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs focus:outline-none placeholder-neutral-400"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleAddFoodItem(meal.id)}
-                          className="px-3 bg-emerald-500 hover:bg-emerald-650 text-neutral-950 font-bold rounded-xl text-xs active:scale-95 transition"
-                        >
-                          + Add
-                        </button>
-                      </div>
-
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* ERROR DISPLAY */}
             {generationError && (
               <p className="text-xs text-red-500 bg-red-500/10 p-3 rounded-xl border border-red-500/20 font-semibold mb-3">
@@ -1139,7 +1031,7 @@ export default function Onboarding({ onComplete }) {
             )}
 
             {/* NAVIGATION BUTTONS */}
-            <div className="flex gap-3 pt-6 border-t border-neutral-100 dark:border-neutral-850 mt-4">
+            <div className="flex gap-3 pt-6 border-t border-neutral-100 dark:border-neutral-800 mt-4">
               {screen > 1 && (
                 <button
                   type="button"
@@ -1151,7 +1043,7 @@ export default function Onboarding({ onComplete }) {
                 </button>
               )}
               
-              {screen < 10 ? (
+              {screen < 9 ? (
                 <button
                   type="button"
                   onClick={validateAndNext}

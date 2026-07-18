@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User, Settings, Download, Upload, Trash2, Moon, Sun, 
   Bell, Database, Play, CheckCircle2, AlertTriangle, ShieldCheck 
@@ -15,6 +15,19 @@ export default function SettingsProfile({
   fullState,
   onSeedData 
 }) {
+  const parseInitialMeals = () => {
+    let cleanMeals = profile.typical_meals || '';
+    if (cleanMeals.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(cleanMeals);
+        if (Array.isArray(parsed)) {
+          return parsed.map(m => `${m.label} (${m.time}): ${m.foods.join(', ')}`).join('\n');
+        }
+      } catch (e) {}
+    }
+    return cleanMeals;
+  };
+
   // Form profile state
   const [profileForm, setProfileForm] = useState({
     name: profile.name || '',
@@ -30,12 +43,45 @@ export default function SettingsProfile({
     fasting_days: profile.fasting_days || [],
     country: profile.country || 'India',
     diet_type: profile.diet_type || 'vegetarian',
-    typical_meals: profile.typical_meals || '',
+    typical_meals: parseInitialMeals(),
     workout_time_available: profile.workout_time_available || '1 hr',
     medical_conditions: profile.medical_conditions || [],
     primary_goal: profile.primary_goal || 'Weight Loss',
     preferred_rest_days: profile.preferred_rest_days || ['Sunday']
   });
+
+  useEffect(() => {
+    let cleanMeals = profile.typical_meals || '';
+    if (cleanMeals.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(cleanMeals);
+        if (Array.isArray(parsed)) {
+          cleanMeals = parsed.map(m => `${m.label} (${m.time}): ${m.foods.join(', ')}`).join('\n');
+        }
+      } catch (e) {}
+    }
+
+    setProfileForm({
+      name: profile.name || '',
+      age: profile.age || 25,
+      gender: profile.gender || 'male',
+      height_cm: profile.height_cm || 175,
+      starting_weight: profile.starting_weight || 80,
+      goal_weight: profile.goal_weight || 75,
+      target_protein: profile.target_protein || 160,
+      target_calories: profile.target_calories || 2200,
+      target_cigarettes: profile.target_cigarettes || 5,
+      start_date: profile.start_date || getLocalDateString(),
+      fasting_days: profile.fasting_days || [],
+      country: profile.country || 'India',
+      diet_type: profile.diet_type || 'vegetarian',
+      typical_meals: cleanMeals,
+      workout_time_available: profile.workout_time_available || '1 hr',
+      medical_conditions: profile.medical_conditions || [],
+      primary_goal: profile.primary_goal || 'Weight Loss',
+      preferred_rest_days: profile.preferred_rest_days || ['Sunday']
+    });
+  }, [profile]);
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -169,7 +215,7 @@ export default function SettingsProfile({
       
       {/* LEFT COLUMN: Profile info (7 cols) */}
       <form onSubmit={handleProfileSubmit} className="lg:col-span-7 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-6 transition-colors duration-200">
-        <h3 className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight border-b border-neutral-200 dark:border-neutral-850 pb-3 flex items-center gap-2 font-sans">
+        <h3 className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight border-b border-neutral-200 dark:border-neutral-800 pb-3 flex items-center gap-2 font-sans">
           <User className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
           Edit Profile & Goals
         </h3>
@@ -305,7 +351,7 @@ export default function SettingsProfile({
           </div>
 
           {/* Medical Conditions checkboxes */}
-          <div className="space-y-2 bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl">
+          <div className="space-y-2 bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl">
             <span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 block">Medical Conditions</span>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {medicalOptions.map(cond => {
@@ -329,7 +375,7 @@ export default function SettingsProfile({
           </div>
 
           {/* Rest Days selector */}
-          <div className="space-y-2 bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl">
+          <div className="space-y-2 bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl">
             <span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 block">Preferred Rest Day(s) (regenerates split splits)</span>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {daysOfWeek.map(day => {
@@ -352,10 +398,10 @@ export default function SettingsProfile({
             </div>
           </div>
 
-          <hr className="border-neutral-200 dark:border-neutral-850" />
+          <hr className="border-neutral-200 dark:border-neutral-800" />
 
           {/* Fasting Days selector */}
-          <div className="space-y-2 bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl">
+          <div className="space-y-2 bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-800 rounded-2xl">
             <span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 block">Fasting Days Setup</span>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {daysOfWeek.map(day => {
@@ -439,7 +485,7 @@ export default function SettingsProfile({
         
         {/* System settings */}
         <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4 transition-colors duration-200">
-          <h3 className="text-sm font-bold text-neutral-900 dark:text-white tracking-wide uppercase border-b border-neutral-200 dark:border-neutral-850 pb-3 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-neutral-900 dark:text-white tracking-wide uppercase border-b border-neutral-200 dark:border-neutral-800 pb-3 flex items-center gap-2">
             <Settings className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
             System Preferences
           </h3>
@@ -447,7 +493,7 @@ export default function SettingsProfile({
           {/* Theme Mode Option */}
           <div className="space-y-3">
             <span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 block">Color Theme Mode</span>
-            <div className="grid grid-cols-2 gap-2 bg-neutral-50 dark:bg-neutral-950/40 p-2.5 rounded-2xl border border-neutral-200 dark:border-neutral-850">
+            <div className="grid grid-cols-2 gap-2 bg-neutral-50 dark:bg-neutral-950/40 p-2.5 rounded-2xl border border-neutral-200 dark:border-neutral-800">
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ ...settings, themeMode: 'light' })}
@@ -476,7 +522,7 @@ export default function SettingsProfile({
           {/* Daily Reminders */}
           <div className="space-y-3 pt-2">
             <span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 block">Daily Reminder Alerts</span>
-            <div className="space-y-3 bg-neutral-50 dark:bg-neutral-950/40 p-3.5 border border-neutral-200 dark:border-neutral-850 rounded-2xl">
+            <div className="space-y-3 bg-neutral-50 dark:bg-neutral-950/40 p-3.5 border border-neutral-200 dark:border-neutral-800 rounded-2xl">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">Push Notifications</span>
                 <button
@@ -485,7 +531,7 @@ export default function SettingsProfile({
                   className={`px-3 py-1 text-xs font-bold rounded-xl transition ${
                     settings.notificationsEnabled
                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                      : 'bg-neutral-200 dark:bg-neutral-850 text-neutral-500 hover:bg-neutral-300 dark:hover:bg-neutral-800'
+                      : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-500 hover:bg-neutral-300 dark:hover:bg-neutral-800'
                   }`}
                 >
                   {settings.notificationsEnabled ? 'Enabled ✓' : 'Click to Enable'}
@@ -493,7 +539,7 @@ export default function SettingsProfile({
               </div>
 
               {settings.notificationsEnabled && (
-                <div className="space-y-2.5 pt-2.5 border-t border-neutral-200 dark:border-neutral-850 flex flex-col">
+                <div className="space-y-2.5 pt-2.5 border-t border-neutral-200 dark:border-neutral-800 flex flex-col">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-neutral-500">Reminder Daily Time:</span>
                     <input
@@ -516,40 +562,9 @@ export default function SettingsProfile({
           </div>
         </div>
 
-        {/* Database backup & restore */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4 transition-colors duration-200">
-          <h3 className="text-sm font-bold text-neutral-900 dark:text-white tracking-wide uppercase border-b border-neutral-200 dark:border-neutral-850 pb-3 flex items-center gap-2">
-            <Database className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-            Data Backup & Restore
-          </h3>
-
-          <p className="text-xs text-neutral-505 leading-relaxed">
-            Backup your journal local copy. Import back files to sync between devices.
-          </p>
-
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <button
-              onClick={handleExportData}
-              className="py-2.5 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-750 text-neutral-750 dark:text-neutral-205 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5"
-            >
-              <Download className="w-4 h-4" /> Export Backup
-            </button>
-
-            <label className="py-2.5 bg-neutral-105 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-750 text-neutral-750 dark:text-neutral-205 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer text-center">
-              <Upload className="w-4 h-4" /> Import Backup
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportDataLocal}
-                className="hidden"
-              />
-            </label>
-          </div>
-        </div>
-
         {/* Database seeding & clean reset */}
         <div className="bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4 transition-colors duration-200">
-          <h3 className="text-sm font-bold text-red-500 dark:text-red-400 tracking-wide uppercase border-b border-neutral-200 dark:border-neutral-850 pb-3 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-red-500 dark:text-red-400 tracking-wide uppercase border-b border-neutral-200 dark:border-neutral-800 pb-3 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
             Danger Zone
           </h3>
