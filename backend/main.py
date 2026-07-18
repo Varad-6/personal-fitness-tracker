@@ -372,59 +372,47 @@ Example structure:
 # Dynamic Workout split seeder (PostgreSQL compatible)
 async def seed_workout_plan_for_user(user_id: int, months: int, db):
     cursor = db.cursor()
+    cursor.execute("DELETE FROM workout_plan WHERE user_id = %s", (user_id,))
     
-    # Try to load profile to pass context to Gemini
+    # Load profile to apply user-specific time constraint and medical constraints
     cursor.execute("SELECT * FROM profile WHERE user_id = %s", (user_id,))
     prof_row = cursor.fetchone()
-    ai_plan = None
+    
+    preferred_rest = ["Sunday"]
+    workout_time = "1 hr"
+    medical_conditions = []
+    
     if prof_row:
         prof_dict = dict(prof_row)
         try:
-            prof_dict["fasting_days"] = json.loads(prof_dict["fasting_days"] or "[]")
-        except:
-            prof_dict["fasting_days"] = []
-        try:
-            prof_dict["medical_conditions"] = json.loads(prof_dict["medical_conditions"] or "[]")
-        except:
-            prof_dict["medical_conditions"] = []
-        try:
-            prof_dict["preferred_rest_days"] = json.loads(prof_dict["preferred_rest_days"] or "[\"Sunday\"]")
-        except:
-            prof_dict["preferred_rest_days"] = ["Sunday"]
-        
-        ai_plan = generate_plan_with_gemini(prof_dict, months)
-        
-    if ai_plan:
-        try:
-            cursor.execute("DELETE FROM workout_plan WHERE user_id = %s", (user_id,))
-            for item in ai_plan:
-                phase = item.get("phase")
-                day = item.get("day")
-                focus = item.get("focus", "Workout")
-                exercises = item.get("exercises", [])
-                cursor.execute("""
-                    INSERT INTO workout_plan (user_id, phase, day, focus, exercises)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (user_id, phase, day)
-                    DO UPDATE SET focus = EXCLUDED.focus, exercises = EXCLUDED.exercises
-                """, (user_id, phase, day, focus, json.dumps(exercises)))
-            db.commit()
-            print(f"Workout plan generated successfully via Gemini for user {user_id}!")
-            return
-        except Exception as e:
-            print("Failed to save Gemini-generated plan, falling back to local plan:", e)
-            db.rollback()
-
-    # Fallback default seeder
-    cursor.execute("DELETE FROM workout_plan WHERE user_id = %s", (user_id,))
-
-    # We shift split to avoid back-to-back workouts on rest days if any
-    preferred_rest = ["Sunday"]
-    if prof_row:
-        try:
-            preferred_rest = json.loads(dict(prof_row).get("preferred_rest_days") or "[\"Sunday\"]")
+            preferred_rest = json.loads(prof_dict.get("preferred_rest_days") or "[\"Sunday\"]")
         except:
             preferred_rest = ["Sunday"]
+        workout_time = prof_dict.get("workout_time_available") or "1 hr"
+        try:
+            medical_conditions = json.loads(prof_dict.get("medical_conditions") or "[]")
+        except:
+            medical_conditions = []
+
+    # Configure exercise limit based on workout time
+    limit = 5
+    if "30 min" in workout_time:
+        limit = 3
+    elif "1.5" in workout_time or "2 hr" in workout_time:
+        limit = 6
+
+    # Swap exercises if joint/knee issues exist
+    has_joint_issues = "Joint/knee issues" in medical_conditions
+    def get_safe_exercise(ex_name):
+        if has_joint_issues:
+            swaps = {
+                "Barbell Squats": "Leg Press (Low Joint Stress)",
+                "Romanian Deadlifts (RDLs)": "Glute Bridges (Low Joint Stress)",
+                "Deadlifts": "Cable Pull-Throughs (Low Joint Stress)",
+                "Cardio (Running/Cycling)": "Rowing Machine (Low Impact Cardio)"
+            }
+            return swaps.get(ex_name, ex_name)
+        return ex_name
 
     total_weeks = round(months * 4.3)
     f_weeks = max(1, round(total_weeks * 0.2))
@@ -448,7 +436,8 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db):
                 {"name": "Incline Dumbbell Press", "group": "Chest"},
                 {"name": "Cable Chest Flyes", "group": "Chest"},
                 {"name": "Overhead Tricep Extension", "group": "Triceps"},
-                {"name": "Tricep Rope Pushdowns", "group": "Triceps"}
+                {"name": "Tricep Rope Pushdowns", "group": "Triceps"},
+                {"name": "Pushups", "group": "Chest"}
             ]
         },
         "Tuesday": {
@@ -458,7 +447,8 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db):
                 {"name": "Bent Over Barbell Rows", "group": "Back"},
                 {"name": "Seated Cable Rows", "group": "Back"},
                 {"name": "Barbell Bicep Curls", "group": "Biceps"},
-                {"name": "Hammer Curls", "group": "Biceps"}
+                {"name": "Hammer Curls", "group": "Biceps"},
+                {"name": "Preacher Curls", "group": "Biceps"}
             ]
         },
         "Wednesday": {
@@ -488,16 +478,17 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db):
                 {"name": "Incline Barbell Press", "group": "Chest"},
                 {"name": "Flat Dumbbell Press", "group": "Chest"},
                 {"name": "Preacher Curls", "group": "Biceps"},
-                {"name": "Incline Dumbbell Curls", "group": "Biceps"}
+                {"name": "Incline Dumbbell Curls", "group": "Biceps"},
+                {"name": "Decline Chest Flyes", "group": "Chest"}
             ]
         },
         "Saturday": {
             "focus": "Full Body & Cardio",
             "exercises": [
-                {"name": "Deadlifts", "group": "Full Body", "reps": "6"},
+                {"name": "Deadlifts", "group": "Full Body"},
                 {"name": "Dumbbell Thrusters", "group": "Full Body"},
-                {"name": "Kettlebell Swings", "group": "Full Body", "reps": "15"},
-                {"name": "Cardio (Running/Cycling)", "group": "Cardio", "sets": 1, "reps": "25 mins"}
+                {"name": "Kettlebell Swings", "group": "Full Body"},
+                {"name": "Cardio (Running/Cycling)", "group": "Cardio"}
             ]
         },
         "Sunday": {
@@ -506,7 +497,6 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db):
         }
     }
 
-    # If Wednesday is selected as preferred rest day instead of Sunday, shift splits
     for phase in phases:
         for day, details in default_split.items():
             if day in preferred_rest:
@@ -515,10 +505,12 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db):
             else:
                 focus_title = details["focus"]
                 exercises = []
-                for idx, ex in enumerate(details["exercises"]):
+                selected_exs = details["exercises"][:limit]
+                for idx, ex in enumerate(selected_exs):
+                    safe_name = get_safe_exercise(ex["name"])
                     exercises.append({
                         "id": f"dyn_{phase['label']}_{day.lower()}_ex{idx + 1}",
-                        "name": ex["name"],
+                        "name": safe_name,
                         "sets": ex.get("sets", phase["sets"]),
                         "reps": ex.get("reps", phase["reps"]),
                         "muscleGroup": ex["group"]
@@ -628,25 +620,25 @@ async def get_profile(current_user: dict = Depends(get_current_user), db = Depen
     return profile_dict
 
 class SummaryRequest(BaseModel):
-    name: str
-    age: int
-    gender: str
-    height_cm: float
-    starting_weight: float
-    activity_level: str
-    plan_duration_months: int
-    goal_weight: float
-    target_protein: int
-    target_calories: int
-    target_cigarettes: int
-    country: str
-    diet_type: str
-    typical_meals: str
-    workout_time_available: str
-    medical_conditions: List[str]
-    primary_goal: str
-    preferred_rest_days: List[str]
-    fasting_days: List[str]
+    name: Optional[str] = "Challenger"
+    age: Optional[int] = 25
+    gender: Optional[str] = "male"
+    height_cm: Optional[float] = 175.0
+    starting_weight: Optional[float] = 70.0
+    activity_level: Optional[str] = "moderate"
+    plan_duration_months: Optional[int] = 2
+    goal_weight: Optional[float] = 65.0
+    target_protein: Optional[int] = 130
+    target_calories: Optional[int] = 2000
+    target_cigarettes: Optional[int] = 0
+    country: Optional[str] = "India"
+    diet_type: Optional[str] = "vegetarian"
+    typical_meals: Optional[str] = ""
+    workout_time_available: Optional[str] = "1 hr"
+    medical_conditions: Optional[List[str]] = []
+    primary_goal: Optional[str] = "Weight Loss"
+    preferred_rest_days: Optional[List[str]] = ["Sunday"]
+    fasting_days: Optional[List[str]] = []
 
 @app.post("/api/profile/onboarding-summary")
 async def generate_onboarding_summary(payload: SummaryRequest):
