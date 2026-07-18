@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from jose import jwt, JWTError
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import google.generativeai as genai
 
 app = FastAPI(title="FitHabit API", version="2.0.0")
 
@@ -23,6 +24,21 @@ app.add_middleware(
 # JWT Secret & Configurations
 SECRET_KEY = "fithabit_local_super_secret_key_change_me_in_prod"
 ALGORITHM = "HS256"
+
+# Load environment variables from local .env if present
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(dotenv_path):
+    with open(dotenv_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ[k.strip()] = v.strip().strip('"').strip("'")
+
+# Setup Gemini API client
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # Supabase PostgreSQL Connection URI
 DATABASE_URL = os.environ.get(
@@ -131,6 +147,12 @@ def init_db():
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """)
+
+    # Ensure profile table has the ai_diet_plan column for storing the AI diet plan
+    try:
+        cursor.execute("ALTER TABLE profile ADD COLUMN IF NOT EXISTS ai_diet_plan TEXT;")
+    except Exception as e:
+        print("Column ai_diet_plan might already exist or failed to add:", e)
 
     conn.commit()
     conn.close()
@@ -255,9 +277,102 @@ async def check_and_seed_user_settings(user_id: int, db):
         )
         db.commit()
 
+def generate_plan_with_gemini(profile: dict, months: int):
+    try:
+        model = genai.GenerativeModel('gemini-flash-latest')
+        
+        prompt = f"""
+You are an expert personal trainer. Generate a highly customized progressive overload workout plan for a user with the following profile:
+- Name: {profile.get('name', 'User')}
+- Age: {profile.get('age', 25)}
+- Gender: {profile.get('gender', 'Male')}
+- Current Weight: {profile.get('starting_weight', 75.0)} kg
+- Goal Weight: {profile.get('goal_weight', 70.0)} kg
+- Activity Level: {profile.get('activity_level', 'Moderate')}
+- Plan Duration: {months} months
+- Intermittent Fasting Days: {profile.get('fasting_days', [])}
+
+Structure your response as a valid JSON array of objects. Do not include any markdown styling like ```json or any other text wrapper. Return ONLY raw JSON.
+The JSON array should contain objects with keys: "phase", "day", "focus", "exercises".
+- "phase": Use exactly three progressive phases matching the plan duration. E.g. for a 2-month plan: "Weeks 1-2 (Foundation)", "Weeks 3-6 (Build)", "Weeks 7-8 (Intensity)".
+- "day": One object for each day of the week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday) for each phase.
+- "focus": A brief description of the workout focus for that day (e.g. "Chest & Triceps", "Rest & Recovery").
+- "exercises": A JSON array of exercise objects. Each exercise must have:
+  - "id": A unique string ID (e.g., "ai_foundation_monday_ex1").
+  - "name": Name of the exercise.
+  - "sets": Integer number of sets.
+  - "reps": String range of reps (e.g., "12", "8-10").
+  - "muscleGroup": The primary muscle targeted.
+Note: For Sunday (or rest days), set "focus" to "Rest & Recovery (Milestone Check-in)" and "exercises" to an empty list [].
+
+Example structure:
+[
+  {{
+    "phase": "Weeks 1-2 (Foundation)",
+    "day": "Monday",
+    "focus": "Chest & Triceps",
+    "exercises": [
+      {{"id": "ai_foundation_monday_ex1", "name": "Flat Bench Press", "sets": 3, "reps": "12", "muscleGroup": "Chest"}},
+      {{"id": "ai_foundation_monday_ex2", "name": "Tricep Pushdown", "sets": 3, "reps": "12", "muscleGroup": "Triceps"}}
+    ]
+  }}
+]
+"""
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].strip() == "```":
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        
+        plan_data = json.loads(text)
+        return plan_data
+    except Exception as e:
+        print("Gemini generation failed, falling back to local seeder:", e)
+        return None
+
 # Dynamic Workout split seeder (PostgreSQL compatible)
 async def seed_workout_plan_for_user(user_id: int, months: int, db):
     cursor = db.cursor()
+    
+    # Try to load profile to pass context to Gemini
+    cursor.execute("SELECT * FROM profile WHERE user_id = %s", (user_id,))
+    prof_row = cursor.fetchone()
+    ai_plan = None
+    if prof_row:
+        prof_dict = dict(prof_row)
+        try:
+            prof_dict["fasting_days"] = json.loads(prof_dict["fasting_days"] or "[]")
+        except:
+            prof_dict["fasting_days"] = []
+        
+        ai_plan = generate_plan_with_gemini(prof_dict, months)
+        
+    if ai_plan:
+        try:
+            cursor.execute("DELETE FROM workout_plan WHERE user_id = %s", (user_id,))
+            for item in ai_plan:
+                phase = item.get("phase")
+                day = item.get("day")
+                focus = item.get("focus", "Workout")
+                exercises = item.get("exercises", [])
+                cursor.execute("""
+                    INSERT INTO workout_plan (user_id, phase, day, focus, exercises)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id, phase, day)
+                    DO UPDATE SET focus = EXCLUDED.focus, exercises = EXCLUDED.exercises
+                """, (user_id, phase, day, focus, json.dumps(exercises)))
+            db.commit()
+            print(f"Workout plan generated successfully via Gemini for user {user_id}!")
+            return
+        except Exception as e:
+            print("Failed to save Gemini-generated plan, falling back to local plan:", e)
+            db.rollback()
+
+    # Fallback default seeder
     cursor.execute("DELETE FROM workout_plan WHERE user_id = %s", (user_id,))
 
     total_weeks = round(months * 4.3)
@@ -450,7 +565,49 @@ async def get_profile(current_user: dict = Depends(get_current_user), db = Depen
     profile_dict = dict(row)
     profile_dict["fasting_days"] = json.loads(profile_dict["fasting_days"] or "[]")
     profile_dict["isOnboarded"] = bool(profile_dict["is_onboarded"])
+    profile_dict["aiDietPlan"] = profile_dict.get("ai_diet_plan")
     return profile_dict
+
+@app.post("/api/profile/generate-diet")
+async def generate_diet_plan(current_user: dict = Depends(get_current_user), db = Depends(get_db)):
+    user_id = current_user["id"]
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM profile WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=400, detail="Profile not found. Please complete profile configuration first.")
+    
+    profile = dict(row)
+    try:
+        profile["fasting_days"] = json.loads(profile["fasting_days"] or "[]")
+    except:
+        profile["fasting_days"] = []
+
+    prompt = f"""
+You are an expert sports nutritionist. Generate a personalized 7-day high-protein diet plan for a user with the following metrics:
+- Name: {profile.get('name', 'User')}
+- Age: {profile.get('age', 25)}
+- Gender: {profile.get('gender', 'Male')}
+- Current Weight: {profile.get('starting_weight', 75.0)} kg
+- Goal Weight: {profile.get('goal_weight', 70.0)} kg
+- Activity Level: {profile.get('activity_level', 'Moderate')}
+- Plan Duration: {profile.get('plan_duration_months', 2)} months
+- Daily Protein Target: {profile.get('target_protein', 150)} g
+- Daily Calories Target: {profile.get('target_calories', 2000)} kcal
+- Intermittent Fasting Days: {profile.get('fasting_days', [])}
+
+Format the response in clean, easy-to-read Markdown. Avoid wrapping the response in ```markdown tags. Start directly with the content. Provide specific recommendations for Breakfast, Lunch, Snacks, Dinner, Hydration, and Supplement schedules (e.g. Whey, Creatine). Also list foods to avoid.
+"""
+    try:
+        model = genai.GenerativeModel('gemini-flash-latest')
+        response = model.generate_content(prompt)
+        diet_md = response.text.strip()
+        
+        cursor.execute("UPDATE profile SET ai_diet_plan = %s WHERE user_id = %s", (diet_md, user_id))
+        db.commit()
+        return {"aiDietPlan": diet_md}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gemini generation failed: {str(e)}")
 
 @app.post("/api/profile")
 async def save_profile(payload: ProfileUpdate, current_user: dict = Depends(get_current_user), db = Depends(get_db)):

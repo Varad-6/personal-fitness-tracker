@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { BookOpen, Sparkles, Plus, AlertCircle, RefreshCw, Apple, ShieldCheck, Flame } from 'lucide-react';
 import { dietReference } from '../data/dietReference';
 
-export default function DietReference({ profile, onUpdateDailyLog, dailyLogs }) {
-  const [activeTab, setActiveTab] = useState('guide'); // 'guide' | 'simulator'
-  
+export default function DietReference({ profile, onUpdateDailyLog, dailyLogs, onGenerateAIDiet }) {
+  const [activeTab, setActiveTab] = useState('guide'); // 'guide' | 'simulator' | 'ai-planner'
+  const [isGenerating, setIsGenerating] = useState(false);
+
   // Protein simulator state
   const [simWeight, setSimWeight] = useState(profile.startingWeight || 75);
   const [activityMultiplier, setActivityMultiplier] = useState(2.0);
@@ -52,11 +53,53 @@ export default function DietReference({ profile, onUpdateDailyLog, dailyLogs }) 
     alert(`Successfully added "${source.name}" to today's log (+${source.protein}g protein, +${source.calories} kcal)!`);
   };
 
+  const handleGenerateDiet = async () => {
+    setIsGenerating(true);
+    try {
+      await onGenerateAIDiet();
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Safe client-side Markdown rendering helper
+  const renderMarkdown = (text) => {
+    if (!text) return null;
+    return text.split('\n').map((line, idx) => {
+      let cleanLine = line.trim();
+      if (cleanLine.startsWith('### ')) {
+        return <h4 key={idx} className="text-sm font-bold text-orange-500 mt-4 mb-2">{cleanLine.replace('### ', '')}</h4>;
+      }
+      if (cleanLine.startsWith('## ')) {
+        return <h3 key={idx} className="text-base font-extrabold text-neutral-900 dark:text-white mt-5 mb-2 border-b border-neutral-250 dark:border-neutral-800 pb-1 flex items-center gap-1.5">{cleanLine.replace('## ', '')}</h3>;
+      }
+      if (cleanLine.startsWith('# ')) {
+        return <h2 key={idx} className="text-lg font-black text-emerald-500 mt-6 mb-4">{cleanLine.replace('# ', '')}</h2>;
+      }
+      if (cleanLine.startsWith('- ') || cleanLine.startsWith('* ')) {
+        return <li key={idx} className="ml-4 list-disc text-xs text-neutral-700 dark:text-neutral-350 my-1 leading-relaxed">{cleanLine.substring(2)}</li>;
+      }
+      if (cleanLine === '') {
+        return <div key={idx} className="h-2" />;
+      }
+      // Handle bold parsing
+      const parts = cleanLine.split('**');
+      if (parts.length > 1) {
+        return (
+          <p key={idx} className="text-xs text-neutral-700 dark:text-neutral-350 leading-relaxed my-1.5">
+            {parts.map((part, i) => i % 2 === 1 ? <strong key={i} className="font-bold text-neutral-900 dark:text-white">{part}</strong> : part)}
+          </p>
+        );
+      }
+      return <p key={idx} className="text-xs text-neutral-700 dark:text-neutral-350 leading-relaxed my-1.5">{cleanLine}</p>;
+    });
+  };
+
   return (
     <div className="space-y-6 pb-24 md:pb-6 text-neutral-800 dark:text-neutral-100 transition-colors duration-200">
       
       {/* Sub Tabs */}
-      <div className="flex gap-2 border-b border-neutral-200 dark:border-neutral-800 pb-2">
+      <div className="flex flex-wrap gap-2 border-b border-neutral-200 dark:border-neutral-800 pb-2">
         <button
           onClick={() => setActiveTab('guide')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
@@ -79,9 +122,20 @@ export default function DietReference({ profile, onUpdateDailyLog, dailyLogs }) 
           <RefreshCw className="w-4 h-4" />
           Protein Goal Calculator
         </button>
+        <button
+          onClick={() => setActiveTab('ai-planner')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+            activeTab === 'ai-planner'
+              ? 'bg-emerald-500 border-emerald-500 text-neutral-950 shadow-md font-extrabold'
+              : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-250 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 hover:border-neutral-350 dark:hover:border-neutral-600'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-orange-400" />
+          AI Meal Planner
+        </button>
       </div>
 
-      {activeTab === 'guide' ? (
+      {activeTab === 'guide' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* Left Column */}
@@ -162,8 +216,9 @@ export default function DietReference({ profile, onUpdateDailyLog, dailyLogs }) 
           </div>
 
         </div>
-      ) : (
-        /* Protein Goal Simulator tab */
+      )}
+
+      {activeTab === 'simulator' && (
         <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-6 transition-colors duration-200">
           <div className="border-b border-neutral-200 dark:border-neutral-850 pb-4">
             <h3 className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight flex items-center gap-2">
@@ -238,7 +293,7 @@ export default function DietReference({ profile, onUpdateDailyLog, dailyLogs }) 
 
               <div className="space-y-3 w-full border-t border-neutral-200 dark:border-neutral-850 pt-4 text-xs text-left">
                 <span className="font-bold text-neutral-500 dark:text-neutral-400 block uppercase tracking-wider">Example Hitting Schedule:</span>
-                <div className="space-y-1.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-300">
+                <div className="space-y-1.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-350">
                   <div className="flex justify-between">
                     <span>🥛 2 Scoops Whey Protein:</span>
                     <span className="text-emerald-650 dark:text-emerald-400 font-bold">48g</span>
@@ -269,6 +324,53 @@ export default function DietReference({ profile, onUpdateDailyLog, dailyLogs }) 
             </div>
 
           </div>
+        </div>
+      )}
+
+      {activeTab === 'ai-planner' && (
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-6 transition-colors duration-200">
+          <div className="border-b border-neutral-200 dark:border-neutral-850 pb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
+                Gemini AI Meal Planner
+              </h3>
+              <p className="text-xs text-neutral-550 dark:text-neutral-400 mt-1">
+                Generates a customized, high-protein 7-day diet guide matched directly to your current biometrics and fasting choices.
+              </p>
+            </div>
+            <button
+              onClick={handleGenerateDiet}
+              disabled={isGenerating}
+              className="py-2.5 px-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 disabled:opacity-50 text-neutral-950 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-md shrink-0"
+            >
+              {isGenerating ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {profile.aiDietPlan ? "Regenerate Plan" : "Generate Plan"}
+                </>
+              )}
+            </button>
+          </div>
+
+          {profile.aiDietPlan ? (
+            <div className="bg-neutral-50 dark:bg-neutral-950/40 border border-neutral-200 dark:border-neutral-850 rounded-2xl p-5 overflow-x-auto select-text space-y-1">
+              {renderMarkdown(profile.aiDietPlan)}
+            </div>
+          ) : (
+            <div className="p-8 bg-neutral-50 dark:bg-neutral-950/20 border border-neutral-200 dark:border-neutral-800 rounded-2xl text-center space-y-3">
+              <span className="text-4xl block">🥗🤖</span>
+              <span className="text-sm font-bold text-neutral-600 dark:text-neutral-400 block">No AI Plan Generated Yet</span>
+              <p className="text-xs text-neutral-500 max-w-sm mx-auto leading-relaxed">
+                Click the button above to analyze your target weight goal of <strong>{profile.goalWeight || profile.startingWeight} kg</strong> and compile customized calorie & protein meal schedules.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

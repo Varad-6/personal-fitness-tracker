@@ -258,6 +258,21 @@ export default function App() {
     }
   };
 
+  // Generate AI Diet Plan using Gemini
+  const handleGenerateAIDiet = async () => {
+    try {
+      const res = await apiFetch('/api/profile/generate-diet', { method: 'POST' });
+      const data = await res.json();
+      if (data && data.aiDietPlan) {
+        setProfile(prev => ({ ...prev, aiDietPlan: data.aiDietPlan }));
+        return data.aiDietPlan;
+      }
+    } catch (err) {
+      console.error("Failed to generate AI diet plan", err);
+      alert("Failed to generate AI diet plan: " + err.message);
+    }
+  };
+
   // Save settings updates
   const handleUpdateSettings = async (nextSettings) => {
     setSettings(nextSettings);
@@ -568,6 +583,7 @@ export default function App() {
               profile={normalizedProfile}
               onUpdateDailyLog={handleUpdateDailyLog}
               dailyLogs={dailyLogs}
+              onGenerateAIDiet={handleGenerateAIDiet}
             />
           )}
 
