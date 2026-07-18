@@ -18,8 +18,8 @@ export default function Login({ onLoginSuccess }) {
     script.onload = () => {
       if (window.google) {
         window.google.accounts.id.initialize({
-          // Placeholder Client ID - user can swap in Settings or .env later
-          client_id: '1234567890-mockclientid.apps.googleusercontent.com',
+          // Check for local Vite environment variable
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '1234567890-mockclientid.apps.googleusercontent.com',
           callback: handleGoogleCredentialResponse,
           auto_select: false,
           cancel_on_tap_outside: true
