@@ -10,9 +10,9 @@ import {
 } from '../utils/helpers';
 
 export default function Onboarding({ onComplete }) {
-  const [step, setStep] = useState(1); // 1: Info, 2: Auto-results/Fasting, 3: Confirmation
+  const [step, setStep] = useState(1); // 1: Biometrics & Preferences, 2: Auto-results/Fasting, 3: Confirm Targets
   
-  // Step 1: Raw Inputs
+  // Step 1: Raw Inputs + Extended Onboarding Choices
   const [info, setInfo] = useState({
     name: '',
     age: '25',
@@ -22,7 +22,14 @@ export default function Onboarding({ onComplete }) {
     startingWeight: '80',
     activityLevel: 'moderate',
     planDuration: '2', // in months
-    cigarettes: '5'
+    cigarettes: '5',
+    country: 'India',
+    dietType: 'vegetarian',
+    typicalMeals: '',
+    workoutTimeAvailable: '1 hr',
+    medicalConditions: [], // e.g. ["Diabetes", "Joint/knee issues"]
+    primaryGoal: 'Weight Loss',
+    preferredRestDays: ['Sunday'] // Mon-Sun rest day picker
   });
 
   // Step 2: Calculated & Editable Goals
@@ -35,13 +42,13 @@ export default function Onboarding({ onComplete }) {
     goalWeight: 67.7,
     targetProtein: 122,
     targetCalories: 2080,
-    targetWater: 2.8, // in Liters
+    targetWater: 2.8,
     targetCigarettes: 5,
     includeFasting: false,
-    fastingDays: [] // array of day names: ['Monday', 'Thursday']
+    fastingDays: []
   });
 
-  // Re-calculate calculations when info changes
+  // Re-calculate math based on user inputs
   const runCalculations = () => {
     const feet = parseFloat(info.heightFeet) || 5;
     const inches = parseFloat(info.heightInches) || 0;
@@ -56,7 +63,18 @@ export default function Onboarding({ onComplete }) {
     const bmiCatObj = getBMICategory(bmiVal);
     
     const suggestedGoal = suggestGoalWeight(heightCm);
-    const suggestedCal = suggestCalorieTarget(tdee);
+    
+    // Scale suggested calories based on Primary Goal:
+    // deficit for Weight Loss, surplus for Muscle Gain, maintenance/slight deficit for recomposition
+    let suggestedCal = suggestCalorieTarget(tdee);
+    if (info.primaryGoal === 'Muscle Gain') {
+      suggestedCal = Math.round(tdee + 350);
+    } else if (info.primaryGoal === 'Body Recomposition') {
+      suggestedCal = Math.round(tdee - 200);
+    } else if (info.primaryGoal === 'General Fitness') {
+      suggestedCal = Math.round(tdee);
+    }
+
     const suggestedProt = suggestProteinTarget(suggestedGoal);
     const suggestedWat = suggestWaterTarget(weight);
     
@@ -76,10 +94,12 @@ export default function Onboarding({ onComplete }) {
     });
   };
 
-  // Run initial calculations on load and whenever step 1 inputs change
   useEffect(() => {
     runCalculations();
-  }, [info.age, info.gender, info.heightFeet, info.heightInches, info.startingWeight, info.activityLevel, info.cigarettes]);
+  }, [
+    info.age, info.gender, info.heightFeet, info.heightInches, info.startingWeight, 
+    info.activityLevel, info.cigarettes, info.primaryGoal
+  ]);
 
   const handleInfoChange = (e) => {
     const { name, value } = e.target;
@@ -94,7 +114,26 @@ export default function Onboarding({ onComplete }) {
     }));
   };
 
-  // Toggle fasting day check
+  // Toggle checklist values (medical conditions)
+  const toggleMedicalCondition = (cond) => {
+    const current = [...info.medicalConditions];
+    if (current.includes(cond)) {
+      setInfo(prev => ({ ...prev, medicalConditions: current.filter(c => c !== cond) }));
+    } else {
+      setInfo(prev => ({ ...prev, medicalConditions: [...current, cond] }));
+    }
+  };
+
+  // Toggle preferred rest days
+  const toggleRestDay = (day) => {
+    const current = [...info.preferredRestDays];
+    if (current.includes(day)) {
+      setInfo(prev => ({ ...prev, preferredRestDays: current.filter(d => d !== day) }));
+    } else {
+      setInfo(prev => ({ ...prev, preferredRestDays: [...current, day] }));
+    }
+  };
+
   const toggleFastingDay = (day) => {
     const current = [...goals.fastingDays];
     if (current.includes(day)) {
@@ -128,29 +167,37 @@ export default function Onboarding({ onComplete }) {
       target_calories: goals.targetCalories,
       target_cigarettes: goals.targetCigarettes,
       start_date: new Date().toISOString().split('T')[0],
-      fasting_days: goals.includeFasting ? goals.fastingDays : []
+      fasting_days: goals.includeFasting ? goals.fastingDays : [],
+      country: info.country,
+      diet_type: info.dietType,
+      typical_meals: info.typicalMeals,
+      workout_time_available: info.workoutTimeAvailable,
+      medical_conditions: info.medicalConditions,
+      primary_goal: info.primaryGoal,
+      preferred_rest_days: info.preferredRestDays
     });
   };
 
   const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const medicalOptions = ["Diabetes", "Thyroid", "High BP", "Joint/knee issues", "None"];
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-50 dark:bg-neutral-950 px-4 py-12 transition-colors duration-200">
-      <div className="max-w-xl w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 relative overflow-hidden">
+      <div className="max-w-2xl w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 relative overflow-y-auto max-h-[90vh]">
+        
         {/* Glow Details */}
-        <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
         {/* Header */}
         <div className="text-center space-y-1 relative z-10">
           <div className="inline-flex p-3 bg-emerald-500/10 dark:bg-emerald-500/5 border border-emerald-500/20 rounded-2xl text-emerald-500 dark:text-emerald-400 mb-2">
             <Award className="w-8 h-8" />
           </div>
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-white">Autogenerate Your FitHabit Plan</h2>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-white font-sans">Autogenerate Your FitHabit Plan</h2>
           <p className="text-xs md:text-sm text-neutral-500 dark:text-neutral-400">
-            Step {step} of 3: {step === 1 ? 'Biometrics' : step === 2 ? 'Biometric Outputs & Fasting' : 'Confirm Targets'}
+            Step {step} of 3: {step === 1 ? 'Biometrics & Preferences' : step === 2 ? 'Calculated Diagnostics' : 'Confirm Targets'}
           </p>
-          {/* Progress bar */}
           <div className="w-full bg-neutral-100 dark:bg-neutral-800 h-1.5 rounded-full overflow-hidden mt-3">
             <div 
               className="bg-emerald-500 h-full rounded-full transition-all duration-300"
@@ -159,31 +206,53 @@ export default function Onboarding({ onComplete }) {
           </div>
         </div>
 
-        {/* STEP 1: Basic Info Form */}
+        {/* STEP 1: Onboarding and Custom Preferences */}
         {step === 1 && (
-          <div className="space-y-4 relative z-10">
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                Your Name
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400 dark:text-neutral-500">
-                  <User className="w-4 h-4" />
+          <div className="space-y-4 relative z-10 text-xs md:text-sm">
+            
+            {/* Row 1: Name and Primary Goal */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
+                  Your Name
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400 dark:text-neutral-500">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    name="name"
+                    placeholder="e.g. Varad"
+                    value={info.name}
+                    onChange={handleInfoChange}
+                    className="block w-full pl-10 pr-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                  />
                 </div>
-                <input
-                  type="text"
-                  name="name"
-                  placeholder="e.g. Varad"
-                  value={info.name}
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
+                  Primary Fitness Goal
+                </label>
+                <select
+                  name="primaryGoal"
+                  value={info.primaryGoal}
                   onChange={handleInfoChange}
-                  className="block w-full pl-10 pr-3 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent transition"
-                />
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                >
+                  <option value="Weight Loss">Weight Loss (Fat Deficit)</option>
+                  <option value="Muscle Gain">Muscle Gain (Hypertrophy Surplus)</option>
+                  <option value="Body Recomposition">Body Recomposition (Lean & Tone)</option>
+                  <option value="General Fitness">General Conditioning & Health</option>
+                </select>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            {/* Row 2: Age, Gender, Plan Duration */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
                   Age (years)
                 </label>
                 <input
@@ -192,50 +261,61 @@ export default function Onboarding({ onComplete }) {
                   min="1"
                   value={info.age}
                   onChange={handleInfoChange}
-                  className="block w-full px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
                 />
               </div>
-              <div className="col-span-2">
-                <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
-                  Gender (BMR calculation)
+
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                  Plan Duration
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setInfo({ ...info, gender: 'male' })}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition ${
-                      info.gender === 'male'
-                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500 dark:text-emerald-400'
-                        : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-250 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400'
-                    }`}
-                  >
-                    Male
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInfo({ ...info, gender: 'female' })}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition ${
-                      info.gender === 'female'
-                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500 dark:text-emerald-400'
-                        : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-250 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400'
-                    }`}
-                  >
-                    Female
-                  </button>
+                <select
+                  name="planDuration"
+                  value={info.planDuration}
+                  onChange={handleInfoChange}
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                >
+                  <option value="1">1 Month (4 Weeks)</option>
+                  <option value="2">2 Months (8 Weeks)</option>
+                  <option value="3">3 Months (12 Weeks)</option>
+                  <option value="6">6 Months (24 Weeks)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                  Gender
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {['male', 'female'].map(g => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setInfo({ ...info, gender: g })}
+                      className={`py-2 px-2 rounded-xl border text-xs font-bold transition capitalize ${
+                        info.gender === g
+                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-250 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            {/* Row 3: Height & Weight */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
                   Height (Feet)
                 </label>
                 <select
                   name="heightFeet"
                   value={info.heightFeet}
                   onChange={handleInfoChange}
-                  className="block w-full px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none transition"
                 >
                   {['3', '4', '5', '6', '7'].map(f => (
                     <option key={f} value={f}>{f} ft</option>
@@ -243,14 +323,14 @@ export default function Onboarding({ onComplete }) {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
                   Height (Inches)
                 </label>
                 <select
                   name="heightInches"
                   value={info.heightInches}
                   onChange={handleInfoChange}
-                  className="block w-full px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none transition"
                 >
                   {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'].map(i => (
                     <option key={i} value={i}>{i} in</option>
@@ -258,7 +338,7 @@ export default function Onboarding({ onComplete }) {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
                   Weight (kg)
                 </label>
                 <input
@@ -267,21 +347,140 @@ export default function Onboarding({ onComplete }) {
                   step="0.1"
                   value={info.startingWeight}
                   onChange={handleInfoChange}
-                  className="block w-full px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Row 4: Country, Diet Type, Workout time */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
-                  Activity Level (TDEE multiplier)
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                  Country / Region
+                </label>
+                <select
+                  name="country"
+                  value={info.country}
+                  onChange={handleInfoChange}
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none transition"
+                >
+                  <option value="India">India (Indian Meals)</option>
+                  <option value="United States">United States</option>
+                  <option value="United Kingdom">United Kingdom</option>
+                  <option value="Other">Other / Global</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                  Dietary Preference
+                </label>
+                <select
+                  name="dietType"
+                  value={info.dietType}
+                  onChange={handleInfoChange}
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none transition"
+                >
+                  <option value="vegetarian">Vegetarian</option>
+                  <option value="non-vegetarian">Non-Vegetarian</option>
+                  <option value="eggetarian">Eggetarian</option>
+                  <option value="vegan">Vegan</option>
+                  <option value="jain">Jain Diet</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                  Workout Time Available
+                </label>
+                <select
+                  name="workoutTimeAvailable"
+                  value={info.workoutTimeAvailable}
+                  onChange={handleInfoChange}
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none transition"
+                >
+                  <option value="30 min">30 min (Shorter volume)</option>
+                  <option value="1 hr">1 hr (Standard split)</option>
+                  <option value="1.5 hr">1.5 hr (High volume)</option>
+                  <option value="2 hr">2 hr (Peak Conditioning)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Row 5: Typical Meals description */}
+            <div>
+              <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                Typical Daily Meals (seeds AI food suggestions)
+              </label>
+              <textarea
+                name="typicalMeals"
+                placeholder="e.g. Breakfast: Poha & milk. Lunch: 2 chapati & green veggies. Dinner: Dal-rice & curd."
+                value={info.typicalMeals}
+                onChange={handleInfoChange}
+                rows="2"
+                className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition text-xs placeholder-neutral-400"
+              />
+            </div>
+
+            {/* Medical Conditions */}
+            <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl space-y-2">
+              <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block">Medical Conditions (Safe Exercise Flags)</span>
+              <div className="flex flex-wrap gap-2">
+                {medicalOptions.map(cond => {
+                  const isSelected = info.medicalConditions.includes(cond);
+                  return (
+                    <button
+                      key={cond}
+                      type="button"
+                      onClick={() => toggleMedicalCondition(cond)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
+                        isSelected
+                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500 dark:text-emerald-400 font-extrabold'
+                          : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-500'
+                      }`}
+                    >
+                      {cond}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Preferred rest days selection */}
+            <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl space-y-2">
+              <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block">Preferred Workout Rest Day(s)</span>
+              <div className="flex flex-wrap gap-1.5">
+                {daysOfWeek.map(day => {
+                  const isRest = info.preferredRestDays.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => toggleRestDay(day)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
+                        isRest
+                          ? 'bg-orange-500/10 border-orange-500 text-orange-600 dark:text-orange-400 font-extrabold'
+                          : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-505'
+                      }`}
+                    >
+                      {day.slice(0, 3)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Row 6: Activity level & Cigarettes */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                  Activity Level
                 </label>
                 <select
                   name="activityLevel"
                   value={info.activityLevel}
                   onChange={handleInfoChange}
-                  className="block w-full px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none transition"
                 >
                   <option value="sedentary">Sedentary (desk work)</option>
                   <option value="light">Lightly Active (active lifestyle)</option>
@@ -289,35 +488,19 @@ export default function Onboarding({ onComplete }) {
                   <option value="very_active">Very Active (gym/cricket daily)</option>
                 </select>
               </div>
-              <div>
-                <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
-                  Plan Duration (Months)
-                </label>
-                <select
-                  name="planDuration"
-                  value={info.planDuration}
-                  onChange={handleInfoChange}
-                  className="block w-full px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
-                >
-                  <option value="1">1 Month (4 Weeks)</option>
-                  <option value="2">2 Months (8 Weeks)</option>
-                  <option value="3">3 Months (12 Weeks)</option>
-                  <option value="6">6 Months (24 Weeks)</option>
-                </select>
-              </div>
-            </div>
 
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
-                Cigarettes Smoked / Day (optional limit)
-              </label>
-              <input
-                type="number"
-                name="cigarettes"
-                value={info.cigarettes}
-                onChange={handleInfoChange}
-                className="block w-full px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
-              />
+              <div>
+                <label className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase block mb-1">
+                  Cigarettes Smoked / Day (optional goal)
+                </label>
+                <input
+                  type="number"
+                  name="cigarettes"
+                  value={info.cigarettes}
+                  onChange={handleInfoChange}
+                  className="block w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-250 dark:border-neutral-700 rounded-xl text-neutral-950 dark:text-white focus:outline-none transition"
+                />
+              </div>
             </div>
 
             <button
@@ -330,10 +513,9 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* STEP 2: Auto-calculated results & Intermittent Fasting Setup */}
+        {/* STEP 2: Calculated results */}
         {step === 2 && (
           <div className="space-y-5 relative z-10">
-            {/* Displaying Live Biometrics */}
             <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl space-y-3">
               <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block">Biometric Diagnostics</span>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
@@ -426,7 +608,7 @@ export default function Onboarding({ onComplete }) {
           </div>
         )}
 
-        {/* STEP 3: Confirmation screen with editable boxes */}
+        {/* STEP 3: Confirmation */}
         {step === 3 && (
           <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
             <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block text-center">Confirm and Adjust Targets</span>

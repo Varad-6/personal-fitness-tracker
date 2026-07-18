@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   ChevronLeft, ChevronRight, Check, X, Plus, Trash2, 
-  Clock, Dumbbell, Coffee, Flame, Moon, PenLine, Sparkles, BookOpen 
+  Clock, Dumbbell, Coffee, Flame, Moon, PenLine, Sparkles, BookOpen, RefreshCw 
 } from 'lucide-react';
 import { 
   getLocalDateString, formatUIDate, getWorkoutForDate, getPlanDayAndPhase 
@@ -24,6 +24,11 @@ export default function CalendarView({
   const [mealProtein, setMealProtein] = useState('');
   const [mealCalories, setMealCalories] = useState('');
 
+  // AI Food Parser local state
+  const [foodQuery, setFoodQuery] = useState('');
+  const [isParsingFood, setIsParsingFood] = useState(false);
+  const [parsedFoodResult, setParsedFoodResult] = useState(null);
+
   // Selected date log
   const log = dailyLogs[selectedDate] || {
     workoutDone: false,
@@ -34,7 +39,8 @@ export default function CalendarView({
     cigarettes: 0,
     sleep: '',
     notes: '',
-    isFastDay: false
+    isFastDay: false,
+    foodLog: []
   };
 
   // Workout details for selected date
@@ -172,6 +178,66 @@ export default function CalendarView({
       caloriesQuick: nextCalories,
       isFastDay: isFastingDaySelected
     });
+  };
+
+  const handleParseFood = async (e) => {
+    e.preventDefault();
+    if (!foodQuery.trim()) return;
+    setIsParsingFood(true);
+    try {
+      const activeToken = localStorage.getItem('fithabit_token');
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
+      };
+      const res = await fetch('/api/diet/parse-food', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query: foodQuery })
+      });
+      if (!res.ok) throw new Error("Failed to parse food");
+      const data = await res.json();
+      setParsedFoodResult(data);
+    } catch (err) {
+      console.error(err);
+      alert("AI food lookup failed: " + err.message);
+    } finally {
+      setIsParsingFood(false);
+    }
+  };
+
+  const handleAddAllParsedFoods = () => {
+    if (!parsedFoodResult || !parsedFoodResult.items) return;
+    
+    let nextProteinLog = [...(log.proteinLog || [])];
+    let nextFoodLog = [...(log.foodLog || [])];
+    let addedCal = 0;
+
+    parsedFoodResult.items.forEach(item => {
+      nextProteinLog.push({
+        id: 'meal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false }),
+        name: `${item.name} (${item.quantity})`,
+        protein: parseFloat(item.protein) || 0,
+        calories: parseInt(item.calories) || 0
+      });
+      nextFoodLog.push(item);
+      addedCal += (parseInt(item.calories) || 0);
+    });
+
+    const nextCalories = (parseInt(log.caloriesQuick) || 0) + addedCal;
+
+    onUpdateDailyLog(selectedDate, {
+      ...log,
+      proteinLog: nextProteinLog,
+      caloriesQuick: nextCalories,
+      foodLog: nextFoodLog,
+      isFastDay: isFastingDaySelected
+    });
+
+    setParsedFoodResult(null);
+    setFoodQuery('');
+    alert("Added all items to today's macros!");
   };
 
   // Calculate day protein total
@@ -450,6 +516,69 @@ export default function CalendarView({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* AI Natural Language Food Logger */}
+          <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 border border-neutral-200 dark:border-neutral-850 rounded-2xl space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+                AI Smart Food Logger & Parsing
+              </span>
+              <span className="text-[9px] text-neutral-400 dark:text-neutral-550">
+                Powered by Gemini AI
+              </span>
+            </div>
+            
+            <form onSubmit={handleParseFood} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Type e.g. '2 chapati, 1 bowl bhaji, curd'"
+                value={foodQuery}
+                onChange={(e) => setFoodQuery(e.target.value)}
+                className="flex-1 px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-250 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white focus:outline-none placeholder-neutral-400 dark:placeholder-neutral-500"
+              />
+              <button
+                type="submit"
+                disabled={isParsingFood || !foodQuery.trim()}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-neutral-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 active:scale-95 shadow-md shrink-0"
+              >
+                {isParsingFood ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                Log
+              </button>
+            </form>
+
+            {parsedFoodResult && (
+              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3 space-y-3 mt-2 animate-fade-in">
+                <div className="flex justify-between items-center border-b border-neutral-100 dark:border-neutral-850 pb-1.5">
+                  <span className="text-[10px] font-bold text-neutral-500 uppercase">Estimated Nutrition Details</span>
+                  <div className="flex gap-2 text-[10px] font-bold">
+                    <span className="text-orange-500">{parsedFoodResult.totalCalories} kcal</span>
+                    <span className="text-emerald-500">{parsedFoodResult.totalProtein}g Protein</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                  {parsedFoodResult.items.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-xs">
+                      <div>
+                        <span className="font-semibold text-neutral-850 dark:text-neutral-200">{item.name}</span>
+                        <span className="text-[9px] text-neutral-400 dark:text-neutral-500 block">Qty: {item.quantity} • Carbs: {item.carbs}g • Fat: {item.fat}g</span>
+                      </div>
+                      <span className="font-bold text-neutral-600 dark:text-neutral-300">+{item.protein}g</span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddAllParsedFoods}
+                  className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-neutral-950 font-bold rounded-xl text-xs transition active:scale-95 shadow-md"
+                >
+                  Confirm & Add to Journal
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Manual Entry Form */}

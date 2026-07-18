@@ -148,11 +148,27 @@ def init_db():
         )
     """)
 
-    # Ensure profile table has the ai_diet_plan column for storing the AI diet plan
+    # 7. Food Cache Table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS food_cache (
+            query TEXT PRIMARY KEY,
+            response_json TEXT
+        )
+    """)
+
+    # Ensure profile and logs tables have the extended columns
     try:
         cursor.execute("ALTER TABLE profile ADD COLUMN IF NOT EXISTS ai_diet_plan TEXT;")
+        cursor.execute("ALTER TABLE profile ADD COLUMN IF NOT EXISTS country TEXT;")
+        cursor.execute("ALTER TABLE profile ADD COLUMN IF NOT EXISTS diet_type TEXT;")
+        cursor.execute("ALTER TABLE profile ADD COLUMN IF NOT EXISTS typical_meals TEXT;")
+        cursor.execute("ALTER TABLE profile ADD COLUMN IF NOT EXISTS workout_time_available TEXT;")
+        cursor.execute("ALTER TABLE profile ADD COLUMN IF NOT EXISTS medical_conditions TEXT;")
+        cursor.execute("ALTER TABLE profile ADD COLUMN IF NOT EXISTS primary_goal TEXT;")
+        cursor.execute("ALTER TABLE profile ADD COLUMN IF NOT EXISTS preferred_rest_days TEXT DEFAULT '[\"Sunday\"]';")
+        cursor.execute("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS food_log TEXT DEFAULT '[]';")
     except Exception as e:
-        print("Column ai_diet_plan might already exist or failed to add:", e)
+        print("Column alterations status:", e)
 
     conn.commit()
     conn.close()
@@ -211,6 +227,13 @@ class ProfileUpdate(BaseModel):
     target_cigarettes: int
     start_date: str
     fasting_days: List[str]
+    country: Optional[str] = ""
+    diet_type: Optional[str] = ""
+    typical_meals: Optional[str] = ""
+    workout_time_available: Optional[str] = "1 hr"
+    medical_conditions: List[str] = []
+    primary_goal: Optional[str] = "Weight Loss"
+    preferred_rest_days: List[str] = ["Sunday"]
 
 class SettingsUpdate(BaseModel):
     themeMode: str
@@ -229,6 +252,7 @@ class DailyLogUpdate(BaseModel):
     notes: Optional[str] = ""
     exercisesCompleted: dict
     isFastDay: bool
+    foodLog: Optional[List[dict]] = []
 
     @field_validator('caloriesQuick', mode='before')
     @classmethod
@@ -289,21 +313,33 @@ You are an expert personal trainer. Generate a highly customized progressive ove
 - Current Weight: {profile.get('starting_weight', 75.0)} kg
 - Goal Weight: {profile.get('goal_weight', 70.0)} kg
 - Activity Level: {profile.get('activity_level', 'Moderate')}
+- Primary Goal: {profile.get('primary_goal', 'Weight Loss')}
 - Plan Duration: {months} months
+- Daily Workout Time Available: {profile.get('workout_time_available', '1 hr')}
+- Medical Conditions: {profile.get('medical_conditions', [])}
+- Preferred Rest Day(s): {profile.get('preferred_rest_days', ['Sunday'])}
 - Intermittent Fasting Days: {profile.get('fasting_days', [])}
+
+Adjust the plan volume:
+- If workout time is 30 mins: Generate 3-4 exercises per day, 2-3 sets each.
+- If workout time is 1 hr: Generate 5-6 exercises per day, 3 sets each.
+- If workout time is 1.5+ hrs: Generate 6-7 exercises per day, 4 sets each.
+
+Safety guidelines:
+- If \"Joint/knee issues\" are present, avoid high-impact knee/joint loading (like heavy squats or jumping lunges), substituting with low-impact alternatives (e.g. leg press, leg extensions, or glute bridges).
 
 Structure your response as a valid JSON array of objects. Do not include any markdown styling like ```json or any other text wrapper. Return ONLY raw JSON.
 The JSON array should contain objects with keys: "phase", "day", "focus", "exercises".
-- "phase": Use exactly three progressive phases matching the plan duration. E.g. for a 2-month plan: "Weeks 1-2 (Foundation)", "Weeks 3-6 (Build)", "Weeks 7-8 (Intensity)".
+- "phase": Use exactly three progressive phases matching the plan duration.
 - "day": One object for each day of the week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday) for each phase.
-- "focus": A brief description of the workout focus for that day (e.g. "Chest & Triceps", "Rest & Recovery").
+- "focus": A brief description of the workout focus for that day.
 - "exercises": A JSON array of exercise objects. Each exercise must have:
   - "id": A unique string ID (e.g., "ai_foundation_monday_ex1").
   - "name": Name of the exercise.
   - "sets": Integer number of sets.
   - "reps": String range of reps (e.g., "12", "8-10").
   - "muscleGroup": The primary muscle targeted.
-Note: For Sunday (or rest days), set "focus" to "Rest & Recovery (Milestone Check-in)" and "exercises" to an empty list [].
+Note: For Preferred Rest Day(s) specified, set "focus" to "Rest & Recovery (Milestone Check-in)" and "exercises" to an empty list [].
 
 Example structure:
 [
@@ -312,8 +348,7 @@ Example structure:
     "day": "Monday",
     "focus": "Chest & Triceps",
     "exercises": [
-      {{"id": "ai_foundation_monday_ex1", "name": "Flat Bench Press", "sets": 3, "reps": "12", "muscleGroup": "Chest"}},
-      {{"id": "ai_foundation_monday_ex2", "name": "Tricep Pushdown", "sets": 3, "reps": "12", "muscleGroup": "Triceps"}}
+      {{"id": "ai_foundation_monday_ex1", "name": "Flat Bench Press", "sets": 3, "reps": "12", "muscleGroup": "Chest"}}
     ]
   }}
 ]
@@ -348,6 +383,14 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db):
             prof_dict["fasting_days"] = json.loads(prof_dict["fasting_days"] or "[]")
         except:
             prof_dict["fasting_days"] = []
+        try:
+            prof_dict["medical_conditions"] = json.loads(prof_dict["medical_conditions"] or "[]")
+        except:
+            prof_dict["medical_conditions"] = []
+        try:
+            prof_dict["preferred_rest_days"] = json.loads(prof_dict["preferred_rest_days"] or "[\"Sunday\"]")
+        except:
+            prof_dict["preferred_rest_days"] = ["Sunday"]
         
         ai_plan = generate_plan_with_gemini(prof_dict, months)
         
@@ -374,6 +417,14 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db):
 
     # Fallback default seeder
     cursor.execute("DELETE FROM workout_plan WHERE user_id = %s", (user_id,))
+
+    # We shift split to avoid back-to-back workouts on rest days if any
+    preferred_rest = ["Sunday"]
+    if prof_row:
+        try:
+            preferred_rest = json.loads(dict(prof_row).get("preferred_rest_days") or "[\"Sunday\"]")
+        except:
+            preferred_rest = ["Sunday"]
 
     total_weeks = round(months * 4.3)
     f_weeks = max(1, round(total_weeks * 0.2))
@@ -455,24 +506,30 @@ async def seed_workout_plan_for_user(user_id: int, months: int, db):
         }
     }
 
+    # If Wednesday is selected as preferred rest day instead of Sunday, shift splits
     for phase in phases:
         for day, details in default_split.items():
-            exercises = []
-            for idx, ex in enumerate(details["exercises"]):
-                exercises.append({
-                    "id": f"dyn_{phase['label']}_{day.lower()}_ex{idx + 1}",
-                    "name": ex["name"],
-                    "sets": ex.get("sets", phase["sets"]),
-                    "reps": ex.get("reps", phase["reps"]),
-                    "muscleGroup": ex["group"]
-                })
+            if day in preferred_rest:
+                focus_title = "Rest & Recovery (Milestone Check-in)"
+                exercises = []
+            else:
+                focus_title = details["focus"]
+                exercises = []
+                for idx, ex in enumerate(details["exercises"]):
+                    exercises.append({
+                        "id": f"dyn_{phase['label']}_{day.lower()}_ex{idx + 1}",
+                        "name": ex["name"],
+                        "sets": ex.get("sets", phase["sets"]),
+                        "reps": ex.get("reps", phase["reps"]),
+                        "muscleGroup": ex["group"]
+                    })
             
             cursor.execute("""
                 INSERT INTO workout_plan (user_id, phase, day, focus, exercises)
                 VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, phase, day)
                 DO UPDATE SET focus = EXCLUDED.focus, exercises = EXCLUDED.exercises
-            """, (user_id, phase["name"], day, details["focus"], json.dumps(exercises)))
+            """, (user_id, phase["name"], day, focus_title, json.dumps(exercises)))
     db.commit()
 
 
@@ -563,7 +620,9 @@ async def get_profile(current_user: dict = Depends(get_current_user), db = Depen
         return {"isOnboarded": False}
     
     profile_dict = dict(row)
-    profile_dict["fasting_days"] = json.loads(profile_dict["fasting_days"] or "[]")
+    profile_dict["fasting_days"] = json.loads(profile_dict.get("fasting_days") or "[]")
+    profile_dict["medical_conditions"] = json.loads(profile_dict.get("medical_conditions") or "[]")
+    profile_dict["preferred_rest_days"] = json.loads(profile_dict.get("preferred_rest_days") or "[\"Sunday\"]")
     profile_dict["isOnboarded"] = bool(profile_dict["is_onboarded"])
     profile_dict["aiDietPlan"] = profile_dict.get("ai_diet_plan")
     return profile_dict
@@ -582,21 +641,33 @@ async def generate_diet_plan(current_user: dict = Depends(get_current_user), db 
         profile["fasting_days"] = json.loads(profile["fasting_days"] or "[]")
     except:
         profile["fasting_days"] = []
+    try:
+        profile["medical_conditions"] = json.loads(profile["medical_conditions"] or "[]")
+    except:
+        profile["medical_conditions"] = []
 
     prompt = f"""
 You are an expert sports nutritionist. Generate a personalized 7-day high-protein diet plan for a user with the following metrics:
 - Name: {profile.get('name', 'User')}
+- Country / Region: {profile.get('country', 'India')}
+- Diet Type: {profile.get('diet_type', 'Vegetarian')}
+- Typical Daily Meals: {profile.get('typical_meals', 'Not specified')}
 - Age: {profile.get('age', 25)}
 - Gender: {profile.get('gender', 'Male')}
 - Current Weight: {profile.get('starting_weight', 75.0)} kg
 - Goal Weight: {profile.get('goal_weight', 70.0)} kg
 - Activity Level: {profile.get('activity_level', 'Moderate')}
-- Plan Duration: {profile.get('plan_duration_months', 2)} months
+- Primary Goal: {profile.get('primary_goal', 'Weight Loss')}
 - Daily Protein Target: {profile.get('target_protein', 150)} g
 - Daily Calories Target: {profile.get('target_calories', 2000)} kcal
+- Medical Conditions: {profile.get('medical_conditions', [])}
 - Intermittent Fasting Days: {profile.get('fasting_days', [])}
 
-Format the response in clean, easy-to-read Markdown. Avoid wrapping the response in ```markdown tags. Start directly with the content. Provide specific recommendations for Breakfast, Lunch, Snacks, Dinner, Hydration, and Supplement schedules (e.g. Whey, Creatine). Also list foods to avoid.
+Important Health Warnings:
+- If user has Diabetes / Blood sugar issues, strictly flag and avoid high-sugar, refined flour/carb meals, recommending low-glycemic alternatives.
+- Tailor suggestions to the region ({profile.get('country', 'India')}) and diet type ({profile.get('diet_type', 'Vegetarian')}).
+
+Format the response in clean, easy-to-read Markdown. Avoid wrapping the response in ```markdown tags. Start directly with the content. Provide specific recommendations for Breakfast, Lunch, Snacks, Dinner, Hydration, and Supplement schedules. Also list foods to avoid.
 """
     try:
         model = genai.GenerativeModel('gemini-flash-latest')
@@ -609,6 +680,69 @@ Format the response in clean, easy-to-read Markdown. Avoid wrapping the response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gemini generation failed: {str(e)}")
 
+class ParseFoodRequest(BaseModel):
+    query: str
+
+@app.post("/api/diet/parse-food")
+async def parse_food(payload: ParseFoodRequest, db = Depends(get_db)):
+    query = payload.query.strip().lower()
+    if not query:
+        raise HTTPException(status_code=400, detail="Empty query")
+
+    cursor = db.cursor()
+    cursor.execute("SELECT response_json FROM food_cache WHERE query = %s", (query,))
+    cached = cursor.fetchone()
+    if cached:
+        return json.loads(cached["response_json"])
+
+    prompt = f"""
+You are a food nutrition database. Parse this natural language food entry: "{query}"
+
+Format your response as a valid JSON object. Do not include any markdown formatting like ```json. Return ONLY raw JSON.
+The JSON object must have keys: "items", "totalCalories", "totalProtein".
+- "items": A list of objects, each containing:
+  - "name": string (e.g. "chapati", "paneer bhurji")
+  - "calories": integer (calories)
+  - "protein": float (protein in grams)
+  - "carbs": float (carbs in grams)
+  - "fat": float (fat in grams)
+  - "quantity": string (e.g. "2 units", "1 bowl")
+- "totalCalories": integer (sum of all items)
+- "totalProtein": float (sum of all protein in grams)
+
+Example query "2 chapati, 1 bowl dal":
+{{
+  "items": [
+    {{"name": "chapati", "calories": 140, "protein": 4.0, "carbs": 30.0, "fat": 0.8, "quantity": "2 units"}},
+    {{"name": "dal", "calories": 150, "protein": 9.0, "carbs": 24.0, "fat": 2.0, "quantity": "1 bowl"}}
+  ],
+  "totalCalories": 290,
+  "totalProtein": 13.0
+}}
+"""
+    try:
+        model = genai.GenerativeModel('gemini-flash-latest')
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].strip() == "```":
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+
+        parsed = json.loads(text)
+        
+        cursor.execute(
+            "INSERT INTO food_cache (query, response_json) VALUES (%s, %s) ON CONFLICT (query) DO UPDATE SET response_json = EXCLUDED.response_json",
+            (query, json.dumps(parsed))
+        )
+        db.commit()
+        return parsed
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI food parsing failed: {str(e)}")
+
 @app.post("/api/profile")
 async def save_profile(payload: ProfileUpdate, current_user: dict = Depends(get_current_user), db = Depends(get_db)):
     user_id = current_user["id"]
@@ -618,6 +752,8 @@ async def save_profile(payload: ProfileUpdate, current_user: dict = Depends(get_
     exists = cursor.fetchone()
     
     fasting_days_str = json.dumps(payload.fasting_days)
+    medical_conditions_str = json.dumps(payload.medical_conditions)
+    preferred_rest_days_str = json.dumps(payload.preferred_rest_days)
     
     if exists:
         cursor.execute("""
@@ -625,26 +761,37 @@ async def save_profile(payload: ProfileUpdate, current_user: dict = Depends(get_
                 name = %s, age = %s, gender = %s, height_cm = %s, starting_weight = %s,
                 activity_level = %s, plan_duration_months = %s, goal_weight = %s,
                 target_protein = %s, target_calories = %s, target_cigarettes = %s,
-                start_date = %s, is_onboarded = 1, fasting_days = %s
+                start_date = %s, is_onboarded = 1, fasting_days = %s,
+                country = %s, diet_type = %s, typical_meals = %s,
+                workout_time_available = %s, medical_conditions = %s,
+                primary_goal = %s, preferred_rest_days = %s
             WHERE user_id = %s
         """, (
             payload.name, payload.age, payload.gender, payload.height_cm, payload.starting_weight,
             payload.activity_level, payload.plan_duration_months, payload.goal_weight,
             payload.target_protein, payload.target_calories, payload.target_cigarettes,
-            payload.start_date, fasting_days_str, user_id
+            payload.start_date, fasting_days_str,
+            payload.country, payload.diet_type, payload.typical_meals,
+            payload.workout_time_available, medical_conditions_str,
+            payload.primary_goal, preferred_rest_days_str,
+            user_id
         ))
     else:
         cursor.execute("""
             INSERT INTO profile (
                 user_id, name, age, gender, height_cm, starting_weight, activity_level,
                 plan_duration_months, goal_weight, target_protein, target_calories,
-                target_cigarettes, start_date, is_onboarded, fasting_days
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
+                target_cigarettes, start_date, is_onboarded, fasting_days,
+                country, diet_type, typical_meals, workout_time_available,
+                medical_conditions, primary_goal, preferred_rest_days
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             user_id, payload.name, payload.age, payload.gender, payload.height_cm, payload.starting_weight,
             payload.activity_level, payload.plan_duration_months, payload.goal_weight,
             payload.target_protein, payload.target_calories, payload.target_cigarettes,
-            payload.start_date, fasting_days_str
+            payload.start_date, 1, fasting_days_str,
+            payload.country, payload.diet_type, payload.typical_meals, payload.workout_time_available,
+            medical_conditions_str, payload.primary_goal, preferred_rest_days_str
         ))
     
     db.commit()
@@ -743,7 +890,8 @@ async def get_daily_logs(current_user: dict = Depends(get_current_user), db = De
             "sleep": row["sleep"],
             "notes": row["notes"],
             "exercisesCompleted": json.loads(row["exercises_completed"] or "{}"),
-            "isFastDay": bool(row["is_fast_day"])
+            "isFastDay": bool(row["is_fast_day"]),
+            "foodLog": json.loads(row.get("food_log") or "[]")
         }
     return logs
 
@@ -753,12 +901,13 @@ async def save_daily_log(date: str, payload: DailyLogUpdate, current_user: dict 
     cursor = db.cursor()
     protein_log_str = json.dumps(payload.proteinLog)
     exercises_completed_str = json.dumps(payload.exercisesCompleted)
+    food_log_str = json.dumps(payload.foodLog or [])
     
     cursor.execute("""
         INSERT INTO daily_logs (
             user_id, date, workout_done, protein_log, calories_quick, water,
-            cigarettes, sleep, notes, exercises_completed, is_fast_day
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            cigarettes, sleep, notes, exercises_completed, is_fast_day, food_log
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (user_id, date)
         DO UPDATE SET
             workout_done = EXCLUDED.workout_done,
@@ -769,11 +918,12 @@ async def save_daily_log(date: str, payload: DailyLogUpdate, current_user: dict 
             sleep = EXCLUDED.sleep,
             notes = EXCLUDED.notes,
             exercises_completed = EXCLUDED.exercises_completed,
-            is_fast_day = EXCLUDED.is_fast_day
+            is_fast_day = EXCLUDED.is_fast_day,
+            food_log = EXCLUDED.food_log
     """, (
         user_id, date, 1 if payload.workoutDone else 0, protein_log_str,
         payload.caloriesQuick, payload.water, payload.cigarettes, payload.sleep,
-        payload.notes, exercises_completed_str, 1 if payload.isFastDay else 0
+        payload.notes, exercises_completed_str, 1 if payload.isFastDay else 0, food_log_str
     ))
     db.commit()
     return {"success": True}
